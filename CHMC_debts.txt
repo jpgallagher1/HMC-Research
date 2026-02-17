@@ -1,0 +1,24 @@
+List of Possible Sources of Errors by file:
+
+datatypes.py
+    uses typing, no jaxtyping, 
+        -> jaxtyping adds shape and dtype information to array type hints. 
+
+hamiltonian.py
+    Hamiltonian has separable structure and not implemented minus sign in 
+    grad_p: """∂H/∂p = ∂K/∂p"""
+        - Not used
+        - possibly handled in J_sym
+    standard_hamiltonian
+        - K missing bias/integration correction terms
+
+integrator.py
+    Validate midptFPI analytically
+        - Use MC-Research/2025/Fall/integrators.ipynb
+    lf_step
+        - check p_half = qp.p - 0.5 * τ * grad.q
+    lf_integrate
+        - do I need to @partial(jax.jit,...)?
+    lf_step_flat
+        - should step with p first
+    

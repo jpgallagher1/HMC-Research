@@ -1,0 +1,106 @@
+John Gallagher
+CHMC
+|- core.py contains core hamiltonian structures
+|- target.py generates $\pi(q)$ pdfs
+|- integrator.py contains numerical integrators for hamiltonians
+|- sampler.py contains sampler logic
+|- metrics.py contains analytics of chains
+|- tests.py contains tests for numerical integrators, hamiltonians, pdfs, and samplers,
+|- plotting.py contains plotting functionality for metrics
+
+Feb 16, 2026
+To Do
+0) Refactor code ASAP
+    - tests.py
+        - analytically confirm numerical integration from MC-Research/2025/Fall/integrators.ipynb
+        - 
+    - metrics.py
+    -
+
+Working in cov_plot.ipynb
+✓ Making some data from existing HMC sampler
+    ✓  Low dim for speed (4, 8, 16)
+    ✓  Make `large number' of chains (20 each)
+- Metric for chains    
+    ✓  Calc cov matrices
+    2) 
+    3) Metric for a single chain cov matrix
+    4) Metric on all chains' cov matrix
+    5) Avg Metric on all chains' cov matrix
+
+- Plot cov matrix comparison
+    6) Plot avg metric
+    7) Plot all chains
+    6) Plot avg + shadow chain
+
+
+
+Feb 11, 2026
+To Do
+Working in cov_plot.ipynb
+✓ Making some data from existing HMC sampler
+    ✓  Low dim for speed (4, 8, 16)
+    ✓  Make `large number' of chains (20 each)
+- Metric for chains    
+    ✓  Calc cov matrices
+    2) 
+    3) Metric for a single chain cov matrix
+    4) Metric on all chains' cov matrix
+    5) Avg Metric on all chains' cov matrix
+
+- Plot cov matrix comparison
+    6) Plot avg metric
+    7) Plot all chains
+    6) Plot avg + shadow chain
+
+Feb 10, 2026
+To Do
+
+Working in cov_plot.ipynb
+✓ Making some data from existing HMC sampler
+    ✓  Low dim for speed
+    1) Make large number of chains
+- Metric for chains    
+    ✓  Calc cov matrices
+    2) 
+    3) Metric for a single chain cov matrix
+    4) Metric on all chains' cov matrix
+    5) Avg Metric on all chains' cov matrix
+
+- Plot cov matrix comparison
+    6) Plot avg metric
+    7) Plot all chains
+    6) Plot avg + shadow chain
+    
+    
+- Metric for Wasserstein
+    
+    ✓
+    - metric for cov matrix
+
+Feb 3, 2026
+
+Working in blackjax_plots.ipynb
+
+- Making some data from existing HMC sampler
+    - Low dim for speed
+    - metric for cov matrix
+    - metric for Wasserstein
+
+Jan 22, 2026
+
+Priorities: 
+1) Duplicate images from the paper https://arxiv.org/pdf/2206.06901
+    - Covariance: error in covariance is also simplified and computed by taking the l ∞ - norm along the diagonal of the sample covariance matrix.
+    - KS Distance
+    - W1 Distance
+    - Histogram of chain samples?
+    - Violin plot of chain samples
+
+
+Jan 16, 2026
+
+Reimplement using just numpy, scipy and leverage sparse matrix for Jacobian
+
+
+Porting Jax Code
