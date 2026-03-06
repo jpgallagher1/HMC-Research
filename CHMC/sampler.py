@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import jax.random as jr
 from typing import Callable, Tuple
 
-from datatypes import QP, SamplerState, SamplerOutput
+from datatypes import QP, SamplerState, SamplerOutput, IntegratorConfig
 from integrator import gen_leapfrog, gen_midptFPI
 
 def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
@@ -30,6 +30,7 @@ def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
     Returns:
         (new_qp, None) - None for scan compatibility
     """
+    _, drawkey = jr.split(key)
     p_new = jr.normal(key, shape=qp.q.shape)
     return QP(q=qp.q, p=p_new), None
 
@@ -46,14 +47,14 @@ def accept_reject(delta_H: float, key: jax.random.PRNGKey) -> bool:
     Returns:
         True if accepted, False otherwise
     """
+    _, drawkey = jr.split(key)
     alpha = jnp.minimum(1.0, jnp.exp(delta_H))
-    u = jr.uniform(key, shape=())
+    u = jr.uniform(drawkey, shape=())
     return u <= alpha
 
 def gen_hmc_kernel(
     H: Callable[[jnp.ndarray], float],
-    tau: float,
-    N: int
+    config: IntegratorConfig
 ) -> Callable:
     """
     Generate HMC kernel using leapfrog integrator.
@@ -67,7 +68,7 @@ def gen_hmc_kernel(
         HMC kernel function
     """
     gradH = jax.grad(H)
-    integrator = gen_leapfrog(gradH, tau, N)
+    integrator = gen_leapfrog(gradH, config)
     
     def hmc_kernel(carry_in, key):
         """
@@ -103,10 +104,7 @@ def gen_hmc_kernel(
 
 def gen_chmc_kernel(
     H: Callable[[jnp.ndarray], float],
-    tau: float,
-    N: int,
-    tol: float,
-    max_iter: int,
+    config: IntegratorConfig,
     solve: Callable = jnp.linalg.solve
 ) -> Callable:
     """
@@ -124,7 +122,7 @@ def gen_chmc_kernel(
         CHMC kernel function
     """
     gradH = jax.grad(H)
-    integrator = gen_midptFPI(gradH, tau, N, tol, max_iter, solve)
+    integrator = gen_midptFPI(gradH, config, solve)
     
     def chmc_kernel(carry_in, key):
         """
@@ -162,8 +160,7 @@ def hmc_sampler(
     initial_sample: list,
     keys: jax.random.PRNGKey,
     H: Callable,
-    tau: float,
-    N: int
+    config: IntegratorConfig
 ) -> Tuple:
     """
     Run HMC sampler.
@@ -178,17 +175,14 @@ def hmc_sampler(
     Returns:
         samples: [qp, delta_H, accepted] for each iteration
     """
-    hmc_kernel = gen_hmc_kernel(H, tau, N)
+    hmc_kernel = gen_hmc_kernel(H, config)
     _, samples = jax.lax.scan(hmc_kernel, initial_sample, xs=keys)
     return samples
 def chmc_sampler(
     initial_sample: list,
     keys: jax.random.PRNGKey,
     H: Callable,
-    tau: float,
-    N: int,
-    tol: float,
-    max_iter: int,
+    config: IntegratorConfig,
     solve: Callable = jnp.linalg.solve
 ) -> Tuple:
     """
@@ -207,12 +201,12 @@ def chmc_sampler(
     Returns:
         samples: [qp, delta_H, accepted] for each iteration
     """
-    chmc_kernel = gen_chmc_kernel(H, tau, N, tol, max_iter, solve)
+    chmc_kernel = gen_chmc_kernel(H, config, solve)
     _, samples = jax.lax.scan(chmc_kernel, initial_sample, xs=keys)
     return samples
 
 
-def extract_positions(samples: Tuple) -> jnp.ndarray:
+def extract_positions(samples: Tuple, accepted_only: bool = False) -> jnp.ndarray:
     """
     Extract position samples from sampler output.
     
@@ -222,11 +216,30 @@ def extract_positions(samples: Tuple) -> jnp.ndarray:
     Returns:
         (n_samples, dim) array of positions
     """
-    qp_samples, _, _ = samples
+    qp_samples, _, accepted = samples
     # Each qp_sample is a flat array [q, p]
     dim = qp_samples.shape[1] // 2
-    return qp_samples[:, :dim]
+    if accepted_only:
+        return qp_samples[:, :dim][accepted]
+    else: 
+        return qp_samples[:, :dim]
 
+def extract_energy(samples: Tuple, accepted_only: bool = False) -> jnp.ndarray:
+    """
+    Extract position samples from sampler output.
+    
+    Args:
+        samples: Output from hmc_sampler or chmc_sampler
+        
+    Returns:
+        (n_samples, dim) array of positions
+    """
+    _, ΔH, accepted = samples
+    # Each qp_sample is a flat array [q, p]
+    if accepted_only:
+        return ΔH[accepted]
+    else: 
+        return ΔH
 
 def compute_accept_rate(samples: Tuple) -> float:
     """

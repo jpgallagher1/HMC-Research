@@ -107,8 +107,7 @@ def lf_integrate(
 
 def gen_leapfrog(
     gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
-    τ: float,
-    N: int
+    config: IntegratorConfig
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """
     Generate leapfrog integrator (flat array API).
@@ -118,10 +117,10 @@ def gen_leapfrog(
     def leapfrog(qp_flat: jnp.ndarray) -> jnp.ndarray:
         def lf_step(carry_in, _):
             qp0 = carry_in
-            qp_out = lf_step_flat(qp0, gradH_flat, τ)
+            qp_out = lf_step_flat(qp0, gradH_flat, config.τ)
             return qp_out, _
         
-        qp_final, _ = jax.lax.scan(lf_step, qp_flat, None, length=N)
+        qp_final, _ = jax.lax.scan(lf_step, qp_flat, None, length=config.N)
         return qp_final
     
     return leapfrog
@@ -212,16 +211,12 @@ def midptFPI_integrate(
 
 def gen_midptFPI(
         gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
-        τ: float,
-        N: int,
-        tol: float,
-        max_iter: int,
+        config: IntegratorConfig,
         solve: Callable = jnp.linalg.solve,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """
     Generate implicit midpt FPI integrator using flat arrays
     """
-    config = IntegratorConfig(τ=τ, N=N, tol = tol, max_iter=max_iter)
     def midptFPI_T(qp_flat: jnp.ndarray) -> jnp.ndarray:
         qp = QP.from_array(qp_flat)
         qp_out = midptFPI_integrate(qp, gradH_flat, config, solve)

@@ -17,7 +17,7 @@ def cov(X):
     n=X.shape[0]
     return (X - Xμ).T@(X-Xμ)/(n-1)
 
-def maxdiagdiff(X,Y):
-    x = np.diag(X)
-    y = np.diag(Y)
-    return np.max(np.abs(x-y))
+def maxtracediff(X,Y) -> float:
+    x = jnp.diag(X)
+    y = jnp.diag(Y)
+    return jnp.max(jnp.abs(x-y))

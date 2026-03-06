@@ -60,7 +60,8 @@ class SamplerOutput(NamedTuple):
 class IntegratorConfig (NamedTuple):
     """Configuration for numerical integrators"""
     τ: float # time-step size
-    N: int # Number of integration steps
+    T: float # final time T = N*τ
+    N: int # Number of integration steps = int(ceil(T/τ))
     tol: float = 1e-2 # Tolerance of implicit method
     max_iter: int = 3 # Max Newton iter
 
