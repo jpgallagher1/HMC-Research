@@ -125,7 +125,7 @@ def gen_leapfrog(
     
     return leapfrog
 
-def midptFPI_step(
+def midptNewtonFPI_step(
         qp: QP,
         gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
         config: IntegratorConfig,
@@ -186,7 +186,7 @@ def midptFPI_step(
     )
     return qp_out, state
 
-def midptFPI_integrate(
+def midptNewtonFPI_integrate(
     qp: QP,
     gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
     config: IntegratorConfig,
@@ -204,12 +204,12 @@ def midptFPI_integrate(
         Final state after N steps
     """
     def body_fn(qp_state, _):
-        qp_new, state = midptFPI_step(qp_state, gradH_flat, config, solve)
+        qp_new, state = midptNewtonFPI_step(qp_state, gradH_flat, config, solve)
         return qp_new, state
     qp_final, states = jax.lax.scan(body_fn, qp, None, length=config.N)
     return qp_final
 
-def gen_midptFPI(
+def gen_midptNewtonFPI(
         gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
         config: IntegratorConfig,
         solve: Callable = jnp.linalg.solve,
@@ -219,7 +219,21 @@ def gen_midptFPI(
     """
     def midptFPI_T(qp_flat: jnp.ndarray) -> jnp.ndarray:
         qp = QP.from_array(qp_flat)
-        qp_out = midptFPI_integrate(qp, gradH_flat, config, solve)
+        qp_out = midptNewtonFPI_integrate(qp, gradH_flat, config, solve)
         return qp_out.to_array()
     
     return midptFPI_T
+
+def FPI(g, x0, max_iter, tol):
+    x = x0
+    err = jnp.inf
+    i = 0
+    while err > tol and i <=max_iter:
+        x_new = g(x)
+        err = jnp.linalg.norm(x_new - x)
+        x = x_new
+        i+=1
+    return x
+
+
+        

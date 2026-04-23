@@ -13,7 +13,7 @@ hamiltonian.py
         - K missing bias/integration correction terms
 
 integrator.py
-    Validate midptFPI analytically
+    Validate midptNewtonFPI analytically
         - Use MC-Research/2025/Fall/integrators.ipynb
     lf_step
         - check p_half = qp.p - 0.5 * τ * grad.q
@@ -21,4 +21,7 @@ integrator.py
         - do I need to @partial(jax.jit,...)?
     lf_step_flat
         - should step with p first
+    Unimplemented AVF
+    Unimplemented FPI
+        - for/while loop in jax
     

@@ -15,7 +15,7 @@ import jax.random as jr
 from typing import Callable, Tuple
 
 from datatypes import QP, SamplerState, SamplerOutput, IntegratorConfig
-from integrator import gen_leapfrog, gen_midptFPI
+from integrator import gen_leapfrog, gen_midptNewtonFPI
 
 def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
     """
@@ -122,7 +122,7 @@ def gen_chmc_kernel(
         CHMC kernel function
     """
     gradH = jax.grad(H)
-    integrator = gen_midptFPI(gradH, config, solve)
+    integrator = gen_midptNewtonFPI(gradH, config, solve)
     
     def chmc_kernel(carry_in, key):
         """
@@ -241,15 +241,3 @@ def extract_energy(samples: Tuple, accepted_only: bool = False) -> jnp.ndarray:
     else: 
         return ΔH
 
-def compute_accept_rate(samples: Tuple) -> float:
-    """
-    Compute acceptance rate from samples.
-    
-    Args:
-        samples: Output from sampler
-        
-    Returns:
-        Acceptance rate in [0, 1]
-    """
-    _, _, accepted = samples
-    return jnp.mean(accepted)

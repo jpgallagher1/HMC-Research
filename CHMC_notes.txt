@@ -1,5 +1,5 @@
 John Gallagher
-CHMC
+CHMC: HMC-Online
 |- core.py contains core hamiltonian structures
 |- target.py generates $\pi(q)$ pdfs
 |- integrator.py contains numerical integrators for hamiltonians
@@ -8,12 +8,90 @@ CHMC
 |- tests.py contains tests for numerical integrators, hamiltonians, pdfs, and samplers,
 |- plotting.py contains plotting functionality for metrics
 
+April 22, 2026
+Projections for wasserstein distance onto vector... Through origin? unit?
+
+March 10, 2026
+Working on wasserstein distance for 2 dim high kappa 
+
+
+Mar 4, 2026
+Currently samplers are broken.  Working through updating objects to accept appropriate namedTuples
+Goal is to make datatypes extensible with new properties to track key metrics. - Working through IntegratorConfig, IntegratorState, SamplerState and SamplerOutput 
+
+Mar 3, 2026
+Andy's Questions: 
+For the higher kappa cases, you might need to decrease the stepsize for the chains to converge (i.e. suboptimal rates). 
+- Also, could you plot a histogram of Delta H for LF versus used for Midpoint? 
+- What's the mean FPIs used to for Newton's method right now?
+- Add in number of grad calls for integrators
+
+
+Feb 25, 2026
+
+Working in cov_plot.ipynb, metrics.py, plotting.py, datatypes.py
+✓ Making some data from existing HMC sampler
+    ✓  Low dim for speed (4, 8, 16)
+    ✓  Make `large number' of chains (20 each)
+    ✓) (optional) Make datatype for receiving chains for use in plotting metrics
+        - https://mc-stan.org/bayesplot/reference/MCMC-overview.html
+    ✓) Make data for chains, for use in plotting metrics        
+        - updated extract samples to take a bool if I only want accepted samples.
+            def extract_positions(samples: Tuple, accepted_only: bool = False) -> jnp.ndarray:
+            """
+            Extract position samples from sampler output.
+            
+            Args:
+                samples: Output from hmc_sampler or chmc_sampler
+                
+            Returns:
+                (n_samples, dim) array of positions
+            """
+            qp_samples, _, accepted = samples
+            # Each qp_sample is a flat array [q, p]
+            dim = qp_samples.shape[1] // 2
+            if accepted_only:
+                return qp_samples[:, :dim][accepted]
+            else: 
+                return qp_samples[:, :dim]
+
+- Metric for chains    
+    ✓  Calc cov matrices
+    ✓) Metric for a single chain cov matrix
+    ✓) Metric on all chains' cov matrix
+    ✓) Avg Metric on all chains' cov matrix
+
+- Plot cov matrix comparison
+    ✓) Plot avg metric
+    ✓) Plot all chains
+    ✓) Plot avg + shadow chain
+
+Feb 23, 2026
+
+Working in cov_plot.ipynb, metrics.py, plotting.py, datatypes.py
+✓ Making some data from existing HMC sampler
+    ✓  Low dim for speed (4, 8, 16)
+    ✓  Make `large number' of chains (20 each)
+    1) Make datatype for receiving chains for use in plotting metrics
+        - https://mc-stan.org/bayesplot/reference/MCMC-overview.html
+- Metric for chains    
+    ✓  Calc cov matrices
+    2) Metric for a single chain cov matrix
+    3) Metric on all chains' cov matrix
+    4) Avg Metric on all chains' cov matrix
+
+- Plot cov matrix comparison
+    6) Plot avg metric
+    7) Plot all chains
+    6) Plot avg + shadow chain
+
+
 Feb 16, 2026
 To Do
-0) Refactor code ASAP
+✓ Refactor code ASAP
     - tests.py
-        - analytically confirm numerical integration from MC-Research/2025/Fall/integrators.ipynb
-        - 
+        ✓ analytically confirm numerical integration from MC-Research/2025/Fall/integrators.ipynb
+            ✓ numerical values match to all decimal places.  
     - metrics.py
     -
 
@@ -32,7 +110,6 @@ Working in cov_plot.ipynb
     6) Plot avg metric
     7) Plot all chains
     6) Plot avg + shadow chain
-
 
 
 Feb 11, 2026
