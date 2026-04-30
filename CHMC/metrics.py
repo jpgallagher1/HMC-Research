@@ -9,6 +9,8 @@ Last Modified: 2026-02-16
 Version: 0.1
 """
 import jax.numpy as jnp
+import jax.random as jr
+from scipy.stats import wasserstein_distance, wasserstein_distance_nd
 import numpy as np
 from typing import Tuple
 
@@ -35,3 +37,45 @@ def maxtracediff(X,Y) -> float:
     x = jnp.diag(X)
     y = jnp.diag(Y)
     return jnp.max(jnp.abs(x-y))
+
+def random_1d_projection(key, target_dim: int) -> tuple:
+    x = jr.uniform(key, target_dim)
+    x_normed = x/jnp.linalg.norm(x)
+    return jnp.linalg.outer(x_normed,x_normed)
+
+def gen_2grid(min, max, N = 201, dim=2):
+    """
+    gen meshgrid of shape (N*N, 2)
+    """
+    x = np.linspace(min, max, N)
+    y = np.linspace(min, max, N)
+    Gx, Gy = np.meshgrid(x, y)
+    grid = np.stack([Gx, Gy], axis=-1).reshape(-1, dim)  # (NxN, 2)
+    return grid
+
+def gen_random_gridpts_pdf(target, NxN2_grid, m_points = 100):
+    """
+    Subset of random gridpoints to generate pdf for w_1_nd metric    
+    """
+    AXY_grid = NxN2_grid @ np.array(target).T              # (NxN, 2)
+    Z_grid   = np.einsum('...i,...i->...', NxN2_grid, AXY_grid)  
+    pdf_grid = np.exp(-0.5 * Z_grid)                    
+    pdf_grid /= pdf_grid.sum()                          
+
+    idx = np.random.choice(len(NxN2_grid), size=m_points, p=pdf_grid)
+    pdf_samples = NxN2_grid[idx]   
+    return pdf_samples
+
+def gen_w1_random_1d_pdf(key, target, dim= 2, min= -2, max= -2, m_points= 101):
+    """
+    generate 1d vector for w1 metric
+    """
+    scale = jnp.expand_dims(jnp.linspace(min, max, m_points), 1)
+    rand_vec = jr.uniform(key, dim)
+    rand_vec_normed = rand_vec/jnp.linalg.norm(rand_vec)
+    x = scale*rand_vec_normed
+    AX = x@np.array(target).T
+    Z = np.einsum('...i,...i->...', x, AX)
+    pdf_line = np.exp(-0.5 * Z)
+    pdf_line /= pdf_line.sum()  
+    return pdf_line
