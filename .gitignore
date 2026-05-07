@@ -1,7 +1,8 @@
 __pycache__/
+*.claude
 *.DS_Store
 *.gitattributes
 CHMC_FALL_2025/*
 CHMC/scratch.ipynb
 CHMC/Sandbox/*
-CHMC/plots/*
+plots/*
