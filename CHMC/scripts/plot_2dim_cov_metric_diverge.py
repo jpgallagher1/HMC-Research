@@ -60,7 +60,11 @@ for k, val in enumerate(τs):
     T = val*N
     tol = 1e-2
     max_iter = 2
-    config = IntegratorConfig(τ=val, T=T, N=N, tol=tol, max_iter=max_iter)
+    config = IntegratorConfig(τ=val, 
+                              T=T, 
+                              N=N, 
+                              tol=tol, 
+                              max_iter=max_iter)
     target_mat = κ100_mat
     true_matrices.append(target_mat)
     H = gaussian_hamiltonian(target_mat, mass_inv=Mass_inv)
@@ -69,11 +73,13 @@ for k, val in enumerate(τs):
     init_sample = [qp_init, 1, False]
     for j, mainnum_samples in enumerate(lens):
         for i in range(runs):
+            # HMC samples
             hmc_keys_main = jr.split(hmckeyring[k + j + i], mainnum_samples)
             sample_hmc = jhmc_sampler(init_sample, hmc_keys_main, H_flat, config)
             jax.block_until_ready(sample_hmc)
             hmc_chainring.append(extract_positions(sample_hmc, accepted_only=True))
-
+            
+            # CHMC samples
             chmc_keys_main = jr.split(chmckeyring[k + j + i], mainnum_samples)
             sample_chmc = jchmc_sampler(init_sample, chmc_keys_main, H_flat, config)
             jax.block_until_ready(sample_chmc)
@@ -130,6 +136,6 @@ def gen_τ_plots(
 
 
 gen_τ_plots(lens, chmc_cov_metric, hmc_cov_metric, config, 0, dims=dims, cond=conds[-3], slope=True)
-plt.savefig('plots/cov_max_diag_err2d_kappa100_diverge.png')
+plt.savefig('plots/verify/cov_max_diag_err2d_kappa100_diverge.png')
 print('plot saved')
 # plt.show()
