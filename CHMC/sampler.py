@@ -205,6 +205,17 @@ def chmc_sampler(
     _, samples = jax.lax.scan(chmc_kernel, initial_sample, xs=keys)
     return samples
 
+def sample_one_run(mainnum_samples, run_idx, hmc_key, chmc_key, init_sample, H_flat, config):
+    """Sample one run - returns raw samples
+    sample_hmc, sample_chmc
+    """
+    hmc_keys_main = jr.split(hmc_key, mainnum_samples)
+    sample_hmc = hmc_sampler(init_sample, hmc_keys_main, H_flat, config)
+    
+    chmc_keys_main = jr.split(chmc_key, mainnum_samples)
+    sample_chmc = chmc_sampler(init_sample, chmc_keys_main, H_flat, config)
+    
+    return sample_hmc, sample_chmc
 
 def extract_positions(samples: Tuple, accepted_only: bool = False) -> jnp.ndarray:
     """

@@ -32,7 +32,7 @@ def gen_gaussian(
     
     return target
 
-def gen_perturb_precision(
+def gen_perturb_mat(
         dim: int = 2,
         perturbation: float = 0.05
 ) -> PrecisionMatrix:
@@ -40,3 +40,6 @@ def gen_perturb_precision(
     prec += perturbation * jnp.diag(jnp.ones(dim-1), k=-1 )
     prec += perturbation * jnp.diag(jnp.ones(dim-1), k=1 )
     return prec
+def gen_2D_perturb_vals(x):
+    """input desired κ(A, np.inf), output is perturb val"""
+    return (x-1)/(x+1)
