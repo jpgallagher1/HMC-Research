@@ -1,7 +1,8 @@
 # John Gallagher
 # May 14, 2026
 # Script to show separation of kappa = 20k 
-#
+# Verifying convergence plot
+# testing against highkappa_mat^{-1} in hamiltonian
 
 import sys
 from pathlib import Path
@@ -56,7 +57,7 @@ high_κ_vec = jnp.array([1, .9999])
 print('Starting for loop')
 totaltime = time.time()
 for k, val in enumerate(τs):
-    N = 20
+    N = 5
     T = val*N
     tol = 1e-2
     max_iter = 2
@@ -130,6 +131,6 @@ def gen_τ_plots(
 
 
 gen_τ_plots(lens, chmc_cov_metric, hmc_cov_metric, config, 0, dims=dims, cond=conds[-3], slope=True)
-plt.savefig('plots/verify/cov_max_diag_err2d_kappa20k_diverge.png')
+plt.savefig('plots/verify/cov_max_diag_err2d_kappa20k_divergeN5.png')
 print('plot saved')
 # plt.show()

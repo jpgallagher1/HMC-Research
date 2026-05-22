@@ -43,3 +43,19 @@ def gen_perturb_mat(
 def gen_2D_perturb_vals(x):
     """input desired κ(A, np.inf), output is perturb val"""
     return (x-1)/(x+1)
+
+def max_τ(target_mat):
+    return 2/jnp.sqrt(jnp.max(jnp.linalg.eigvals(target_mat)))
+
+def banana(q, a=1, b=100): 
+    """Rosebrock function aka banana"""
+    assert q.shape == (2,), 'q must be 2 dim'
+    q1, q2 = q[0], q[1]
+    log_density = -((a - q1)**2 + b * (q2 - q1**2)**2)
+    return jnp.exp(log_density)
+
+def himmelbau(q):
+    assert q.shape == (2,), 'q must be 2 dim'
+    x,y = q[0], q[1]
+    log_density = -((x**2+y-11)**2+(x+y**2-7)**2)
+    return jnp.exp(log_density)
