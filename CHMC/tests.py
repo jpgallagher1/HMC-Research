@@ -77,3 +77,47 @@ class TestHamiltonian:
         qp = QP(q=jnp.ones(2), p=jnp.ones(2))
         result = H(qp)
         assert jnp.array(result).shape == ()
+
+
+class TestIntegrator:
+    # Analytic exact solution — computed via scipy.linalg.expm on the linear ODE system
+    # d/dt [q,p] = [[0,I],[-Lam,0]] [q,p], Lam = gen_perturb_mat(2, 0.05), T=1.0
+    EXACT_Q = jnp.array([0.53286718, 0.82045343])
+    EXACT_P = jnp.array([-0.86215084, 0.50585114])
+
+    def _setup(self):
+        Lam = gen_perturb_mat(dim=2, perturbation=0.05)
+        Mass_inv = jnp.eye(2)
+        H = gaussian_hamiltonian(Lam, Mass_inv)
+        gradH_flat = jax.grad(lambda qp_flat: H(QP.from_array(qp_flat)))
+        q0 = jnp.array([1.0, 0.0])
+        p0 = jnp.array([0.0, 1.0])
+        qp0_flat = QP(q=q0, p=p0).to_array()
+        config = IntegratorConfig(0.1, 1.0, 10, tol=1e-8, max_iter=20)
+        return gradH_flat, qp0_flat, config
+
+    def test_leapfrog_vs_exact(self):
+        gradH_flat, qp0_flat, config = self._setup()
+        integrator = gen_leapfrog(gradH_flat, config)
+        qp_out = QP.from_array(integrator(qp0_flat))
+        np.testing.assert_allclose(qp_out.q, self.EXACT_Q, atol=5e-3)
+        np.testing.assert_allclose(qp_out.p, self.EXACT_P, atol=5e-3)
+
+    def test_midpoint_vs_exact(self):
+        gradH_flat, qp0_flat, config = self._setup()
+        integrator = gen_midptNewtonFPI(gradH_flat, config)
+        qp_out = QP.from_array(integrator(qp0_flat))
+        np.testing.assert_allclose(qp_out.q, self.EXACT_Q, atol=5e-3)
+        np.testing.assert_allclose(qp_out.p, self.EXACT_P, atol=5e-3)
+
+    def test_leapfrog_output_shape(self):
+        gradH_flat, qp0_flat, config = self._setup()
+        integrator = gen_leapfrog(gradH_flat, config)
+        out = integrator(qp0_flat)
+        assert out.shape == qp0_flat.shape
+
+    def test_midpoint_output_shape(self):
+        gradH_flat, qp0_flat, config = self._setup()
+        integrator = gen_midptNewtonFPI(gradH_flat, config)
+        out = integrator(qp0_flat)
+        assert out.shape == qp0_flat.shape
