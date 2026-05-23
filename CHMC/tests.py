@@ -39,3 +39,41 @@ class TestDatatypes:
         assert cfg.N == 10
         assert cfg.tol == 1e-2
         assert cfg.max_iter == 3
+
+
+class TestHamiltonian:
+    def test_j_sym(self):
+        q = jnp.array([1.0, 2.0])
+        p = jnp.array([3.0, 4.0])
+        result = J_sym(QP(q=q, p=p))
+        np.testing.assert_array_equal(result.q, p)
+        np.testing.assert_array_equal(result.p, -q)
+
+    def test_qj_sym(self):
+        q = jnp.array([1.0, 2.0])
+        p = jnp.array([3.0, 4.0])
+        result = qJ_sym(QP(q=q, p=p))
+        np.testing.assert_array_equal(result.q, p)
+        np.testing.assert_array_equal(result.p, jnp.zeros_like(q))
+
+    def test_pj_sym(self):
+        q = jnp.array([1.0, 2.0])
+        p = jnp.array([3.0, 4.0])
+        result = pJ_sym(QP(q=q, p=p))
+        np.testing.assert_array_equal(result.q, jnp.zeros_like(p))
+        np.testing.assert_array_equal(result.p, -q)
+
+    def test_gaussian_hamiltonian_at_origin(self):
+        Lam = jnp.eye(2)
+        Mass_inv = jnp.eye(2)
+        H = gaussian_hamiltonian(Lam, Mass_inv)
+        qp = QP(q=jnp.zeros(2), p=jnp.zeros(2))
+        assert float(H(qp)) == pytest.approx(0.0)
+
+    def test_gaussian_hamiltonian_returns_scalar(self):
+        Lam = jnp.eye(2)
+        Mass_inv = jnp.eye(2)
+        H = gaussian_hamiltonian(Lam, Mass_inv)
+        qp = QP(q=jnp.ones(2), p=jnp.ones(2))
+        result = H(qp)
+        assert jnp.array(result).shape == ()
