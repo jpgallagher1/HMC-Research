@@ -121,3 +121,81 @@ class TestIntegrator:
         integrator = gen_midptNewtonFPI(gradH_flat, config)
         out = integrator(qp0_flat)
         assert out.shape == qp0_flat.shape
+
+
+class TestSampler:
+    def _setup(self):
+        key = jr.PRNGKey(42)
+        dim = 2
+        Lam = gen_perturb_mat(dim=2, perturbation=0.05)
+        Mass_inv = jnp.eye(2)
+        H = gaussian_hamiltonian(Lam, Mass_inv)
+        H_flat = lambda qp_flat: H(QP.from_array(qp_flat))
+        config = IntegratorConfig(0.1, 1.0, 10, tol=1e-2, max_iter=3)
+        qp0_flat = QP(q=jnp.array([1.0, 0.0]), p=jnp.array([0.0, 1.0])).to_array()
+        init_sample = [qp0_flat, 1.0, False]
+        return key, dim, H_flat, config, init_sample
+
+    def test_draw_momentum_keeps_q(self):
+        key = jr.PRNGKey(0)
+        q = jnp.array([1.0, 2.0])
+        p = jnp.array([3.0, 4.0])
+        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
+        np.testing.assert_array_equal(new_qp.q, q)
+
+    def test_draw_momentum_p_shape(self):
+        key = jr.PRNGKey(0)
+        q = jnp.array([1.0, 2.0])
+        p = jnp.array([3.0, 4.0])
+        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
+        assert new_qp.p.shape == p.shape
+
+    def test_accept_reject_returns_bool(self):
+        key = jr.PRNGKey(0)
+        result = accept_reject(0.0, key)
+        assert jnp.array(result).shape == ()
+        assert jnp.array(result).dtype == jnp.bool_
+
+    def test_hmc_sampler_output_shape(self):
+        key, dim, H_flat, config, init_sample = self._setup()
+        n_samples = 10
+        keys = jr.split(key, n_samples)
+        qp_arr, dH_arr, acc_arr = hmc_sampler(init_sample, keys, H_flat, config)
+        assert qp_arr.shape == (n_samples, 2 * dim)
+        assert dH_arr.shape == (n_samples,)
+        assert acc_arr.shape == (n_samples,)
+
+    def test_chmc_sampler_output_shape(self):
+        key, dim, H_flat, config, init_sample = self._setup()
+        n_samples = 10
+        keys = jr.split(key, n_samples)
+        qp_arr, dH_arr, acc_arr = chmc_sampler(init_sample, keys, H_flat, config)
+        assert qp_arr.shape == (n_samples, 2 * dim)
+        assert dH_arr.shape == (n_samples,)
+        assert acc_arr.shape == (n_samples,)
+
+    def test_extract_positions_shape(self):
+        key, dim, H_flat, config, init_sample = self._setup()
+        n_samples = 10
+        keys = jr.split(key, n_samples)
+        samples = hmc_sampler(init_sample, keys, H_flat, config)
+        positions = extract_positions(samples)
+        assert positions.shape == (n_samples, dim)
+
+    def test_extract_positions_accepted_only(self):
+        key, dim, H_flat, config, init_sample = self._setup()
+        n_samples = 10
+        keys = jr.split(key, n_samples)
+        samples = hmc_sampler(init_sample, keys, H_flat, config)
+        positions = extract_positions(samples, accepted_only=True)
+        assert positions.ndim == 2
+        assert positions.shape[0] <= n_samples
+        assert positions.shape[1] == dim
+
+    def test_extract_energy_shape(self):
+        key, dim, H_flat, config, init_sample = self._setup()
+        n_samples = 10
+        keys = jr.split(key, n_samples)
+        samples = hmc_sampler(init_sample, keys, H_flat, config)
+        energy = extract_energy(samples)
+        assert energy.shape == (n_samples,)
