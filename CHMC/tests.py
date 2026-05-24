@@ -199,3 +199,38 @@ class TestSampler:
         samples = hmc_sampler(init_sample, keys, H_flat, config)
         energy = extract_energy(samples)
         assert energy.shape == (n_samples,)
+
+
+class TestMetrics:
+    def _make_samples(self, n, accepted_flags):
+        qp_arr = jnp.zeros((n, 4))
+        dH_arr = jnp.zeros(n)
+        acc_arr = jnp.array(accepted_flags, dtype=bool)
+        return (qp_arr, dH_arr, acc_arr)
+
+    def test_accept_rate_all_accepted(self):
+        samples = self._make_samples(20, [True] * 20)
+        assert float(compute_accept_rate(samples)) == pytest.approx(1.0)
+
+    def test_accept_rate_none_accepted(self):
+        samples = self._make_samples(20, [False] * 20)
+        assert float(compute_accept_rate(samples)) == pytest.approx(0.0)
+
+    def test_maxtracediff_identical(self):
+        A = jnp.diag(jnp.array([1.0, 2.0, 3.0]))
+        assert float(maxtracediff(A, A)) == pytest.approx(0.0)
+
+    def test_maxtracediff_known(self):
+        # diag([1, 3]) vs diag([2, 3]) → abs diff = [1, 0] → max = 1
+        A = jnp.diag(jnp.array([1.0, 3.0]))
+        B = jnp.diag(jnp.array([2.0, 3.0]))
+        assert float(maxtracediff(A, B)) == pytest.approx(1.0)
+
+    def test_cov_constant_data_is_zero(self):
+        # constant rows → zero variance
+        X = jnp.ones((10, 2))
+        np.testing.assert_allclose(cov(X), jnp.zeros((2, 2)), atol=1e-10)
+
+    def test_gen_2grid_shape(self):
+        grid = gen_2grid(-1, 1, N=5)
+        assert grid.shape == (25, 2)
