@@ -79,3 +79,29 @@ def gen_w1_random_1d_pdf(key, target, dim= 2, min= -2, max= -2, m_points= 101):
     pdf_line = np.exp(-0.5 * Z)
     pdf_line /= pdf_line.sum()  
     return pdf_line
+
+def gen_random_gridpts_nongauss_pdf(target, NxN2_grid, m_points = 101):
+    """
+    Subset of random gridpoints to generate pdf for w_1_nd metric, generic target
+    """
+    assert NxN2_grid.shape[-1] ==2, 'Shape must be (NxN, 2)'
+    AXY_grid = NxN2_grid 
+    pdf_grid   = jax.vmap(target)(AXY_grid)  
+    pdf_grid /= pdf_grid.sum()                          
+
+    idx = np.random.choice(len(NxN2_grid), size=m_points, p=pdf_grid)
+    pdf_samples = NxN2_grid[idx]   
+    return pdf_samples
+
+def gen_cdf1D_marginal(key, target, dim = 2, m_points=101):
+    """
+    Generate a 1d cdf along a random vector through the origin, respecting the marginal distribution.
+    
+    For use in wasserstein 1 metric:
+    
+    """
+    proj_n = random_1d_projection(key, dim)
+    
+    return
+def max_τ(target_mat):
+    return 2/jnp.sqrt(jnp.max(jnp.linalg.eigvals(target_mat)))
