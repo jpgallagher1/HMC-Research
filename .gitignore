@@ -8,3 +8,4 @@ CHMC/Sandbox/*
 CHMC/pinnacles/*
 plots/*
 *.stdout
+mcmc_results/*
