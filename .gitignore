@@ -9,3 +9,4 @@ CHMC/pinnacles/*
 plots/*
 *.stdout
 mcmc_results/*
+*.out
