@@ -17,6 +17,47 @@ from typing import Callable, Tuple
 from datatypes import QP, SamplerState, SamplerOutput, IntegratorConfig
 from integrator import gen_leapfrog, gen_midptNewtonFPI
 
+def gen_draw_momentum(c:float = 0.2, constant_p:bool =False):
+    def draw_momentum_constant_p(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
+        """
+        Resample momentum from standard Gaussian.
+        
+        Keeps position q, resamples p ~ N(0, I)
+        
+        Args:
+            qp: Current state
+            key: JAX random key
+            Only use constant_p if dim ==2
+        Returns:
+            (new_qp, None) - None for scan compatibility
+        """
+        _, drawkey = jr.split(key)
+        p0 = jr.normal(drawkey)
+        p1 = jnp.sqrt(c-p0**2)
+        p_new = jnp.array([p0, p1])
+        return QP(q=qp.q, p = p_new), None
+   
+    def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
+        """
+        Resample momentum from standard Gaussian.
+        
+        Keeps position q, resamples p ~ N(0, I)
+        
+        Args:
+            qp: Current state
+            key: JAX random key
+        Returns:
+            (new_qp, None) - None for scan compatibility
+        """
+        _, drawkey = jr.split(key)
+        p_new = jr.normal(drawkey, shape=qp.q.shape)
+        return QP(q=qp.q, p=p_new), None
+    if constant_p:
+        return draw_momentum_constant_p
+    else:
+        return draw_momentum
+
+
 def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
     """
     Resample momentum from standard Gaussian.
@@ -26,12 +67,11 @@ def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
     Args:
         qp: Current state
         key: JAX random key
-        
     Returns:
         (new_qp, None) - None for scan compatibility
     """
     _, drawkey = jr.split(key)
-    p_new = jr.normal(key, shape=qp.q.shape)
+    p_new = jr.normal(drawkey, shape=qp.q.shape)
     return QP(q=qp.q, p=p_new), None
 
 def accept_reject(delta_H: float, key: jax.random.PRNGKey) -> bool:
@@ -69,6 +109,7 @@ def gen_hmc_kernel(
     """
     gradH = jax.grad(H)
     integrator = gen_leapfrog(gradH, config)
+    draw_momentum = gen_draw_momentum(constant_p=config.constant_p)
     
     def hmc_kernel(carry_in, key):
         """

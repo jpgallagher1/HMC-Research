@@ -64,6 +64,7 @@ class IntegratorConfig (NamedTuple):
     N: int # Number of integration steps = int(ceil(T/τ))
     tol: float = 1e-2 # Tolerance of implicit method
     max_iter: int = 3 # Max Newton iter
+    constant_p: bool = False # used in sampler
 
 # Type aliases for clarity
 TargetDensity = Callable[[jnp.ndarray], float]

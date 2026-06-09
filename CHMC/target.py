@@ -54,8 +54,16 @@ def banana(q, a=1, b=100):
     log_density = -((a - q1)**2 + b * (q2 - q1**2)**2)
     return jnp.exp(log_density)
 
-def himmelbau(q):
+def himmelblau(q):
     assert q.shape == (2,), 'q must be 2 dim'
     x,y = q[0], q[1]
     log_density = -((x**2+y-11)**2+(x+y**2-7)**2)
     return jnp.exp(log_density)
+
+def fourpeaks(q):
+    "coefficient is computed numerically using desmos... https://www.desmos.com/calculator/uk3ixhdkah"
+
+    assert q.shape == (2,), 'q must be 2 dim'
+    x,y = q[0], q[1]
+    log_density = -0.5*((x**2+y-2)**2+(x+y**2-2)**2)
+    return 1/3.90992630367*jnp.exp(log_density)

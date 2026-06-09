@@ -64,9 +64,9 @@ def gen_τ_plots(
     plt.loglog(lens, hmc_metrics[i, :], "-o", color="C1", alpha=0.15)
     subtitle1 = f"\n$dim$ = {dims[0]}, $\\kappa$ = {cond: 0.2f}, $\\tau = $ {config.τ}, $N = $ {config.N}"
     if avg:
-        avg_chmc = np.mean(chmc_metrics[i, :], axis=1)
+        avg_chmc = np.mean(chmc_metrics[i, :], axis=-1)
         plt.loglog(lens, avg_chmc, "-*", color="C0", label="avg CHMC", alpha=1)
-        avg_hmc = np.mean(hmc_metrics[i, :], axis=1)
+        avg_hmc = np.mean(hmc_metrics[i, :], axis=-1)
         plt.loglog(lens, avg_hmc, "-o", color="C1", label="avg HMC", alpha=1)
     if slope:
         chmc_p = np.polyfit(np.log(lens), np.log(avg_chmc), 1)

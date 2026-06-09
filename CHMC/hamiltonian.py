@@ -58,6 +58,14 @@ def pJ_sym(qp: QP) -> QP:
     Used in momentum half-step of LF integrator
     """
     return QP(q=jnp.zeros_like(qp.p), p=-qp.q)
+def J_sym_flat(vec) -> jnp.array:
+    """
+    J is the symplectic Jacobian matrix for Hamiltonians where 
+    J = ([[0, I], [-I, 0]])
+    """
+    qp = QP.from_array(vec)
+    outvec = QP(q = qp.p, p = -qp.q).to_array()
+    return outvec
 
 # Hamiltonian constructors
 

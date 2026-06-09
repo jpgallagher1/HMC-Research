@@ -13,7 +13,7 @@ import jax.numpy as jnp
 from functools import partial
 from typing import Callable
 from datatypes import QP, IntegratorState, IntegratorConfig
-from hamiltonian import J_sym, qJ_sym, pJ_sym
+from hamiltonian import J_sym, qJ_sym, pJ_sym, J_sym_flat
 
 def lf_step(
         qp: QP,
@@ -235,5 +235,76 @@ def FPI(g, x0, max_iter, tol):
         i+=1
     return x
 
+def gauss4(a: float,
+           b: float,
+            n_pts=4):
+    """
+    Generate the rescaled gauss quadrature points
+    """
+    β1 = (b-a)/2
+    β0= (a+b)/2
+    x0 = -jnp.sqrt(3/7 +(2/7)*jnp.sqrt(6/5))    
+    x1 = -jnp.sqrt(3/7 -(2/7)*jnp.sqrt(6/5))    
+    x2 = jnp.sqrt(3/7 -(2/7)*jnp.sqrt(6/5))    
+    x3 = jnp.sqrt(3/7 +(2/7)*jnp.sqrt(6/5))
 
+    w0 = (18-jnp.sqrt(30))/36
+    w1 = (18+jnp.sqrt(30))/36
+    w2 = (18+jnp.sqrt(30))/36
+    w3 = (18-jnp.sqrt(30))/36
+
+    Xout = β1*jnp.array([x0, x1, x2, x3])+β0
+    Wout = β1*jnp.array([w0, w1, w2, w3])
+    return Xout, Wout
+def gen_AVF(gradH, config):
+    ti, wi = gauss4(0,1)
+    def AVF(qp0: QP,
+            qp1: QP,
+            ):
+        """Implementing AVF 
+        qp_{n+1} = qp_n + τ * J vmap(∇H)((qp_n + qp_{n+1}))
+
+        This is numerical implementation but i'll likely need to do some more solving for gradH_flat
+        """
         
+        x0 = qp0.to_array()
+        X0 = jnp.expand_dims(x0, -1)
+        X1 = jnp.expand_dims(qp1.to_array(), -1)
+        X = X0+ ti*(X1-X0)
+        vgradH = jax.vmap(gradH, in_axes=-1)
+        x_out = x0 + config.τ* J_sym_flat(wi@ vgradH(X))
+        return QP.from_array(x_out)
+    return AVF
+def gen_FPI(func, config):
+    def FPI(carry, xs):
+        xn = carry
+        xn1 = func(xn, xn)
+        def cond(carry):
+            """bool for while err> tol and iter< max_iter"""
+            i, x, y = carry
+            residual_q = y.q - x.q
+            residual_p = y.p - x.p
+
+            err = jnp.sqrt(
+                jnp.sum(residual_q**2) +
+                jnp.sum(residual_p**2))
+            # residual = y.to_array()-x.to_array()
+            # err = jnp.linalg.norm(residual)
+            return (err > config.tol) & (i< config.max_iter)
+        def body_step(carry):
+            i, x, y = carry
+            return (i +1, y, func(xn, y))
+        n_iter, _, x_next = jax.lax.while_loop(cond, body_step, (1, xn, xn1))
+        return x_next, x_next
+    return FPI
+def gen_AVF_FPI_T(F_flat, config):
+    AVF_FPI = gen_FPI(gen_AVF(F_flat, config), config)
+    def AVF_FPI_T(θω_init):
+        final_state, trajectory = jax.lax.scan(
+            AVF_FPI,
+            θω_init,
+            None,
+            length=config.N,
+        )
+        return trajectory
+    return AVF_FPI_T

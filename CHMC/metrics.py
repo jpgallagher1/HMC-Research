@@ -8,6 +8,7 @@ Created: 2026-02-16
 Last Modified: 2026-02-16
 Version: 0.1
 """
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 from scipy.stats import wasserstein_distance, wasserstein_distance_nd
@@ -53,11 +54,11 @@ def gen_2grid(min, max, N = 201, dim=2):
     grid = np.stack([Gx, Gy], axis=-1).reshape(-1, dim)  # (NxN, 2)
     return grid
 
-def gen_random_gridpts_pdf(target, NxN2_grid, m_points = 100):
+def gen_random_gridpts_mat_pdf(precision, NxN2_grid, m_points = 100):
     """
-    Subset of random gridpoints to generate pdf for w_1_nd metric    
+    Subset of random gridpoints to generate pdf for w_1_nd metric, using precision matrix
     """
-    AXY_grid = NxN2_grid @ np.array(target).T              # (NxN, 2)
+    AXY_grid = NxN2_grid @ np.array(precision).T              # (NxN, 2)
     Z_grid   = np.einsum('...i,...i->...', NxN2_grid, AXY_grid)  
     pdf_grid = np.exp(-0.5 * Z_grid)                    
     pdf_grid /= pdf_grid.sum()                          
@@ -66,9 +67,17 @@ def gen_random_gridpts_pdf(target, NxN2_grid, m_points = 100):
     pdf_samples = NxN2_grid[idx]   
     return pdf_samples
 
-def gen_w1_random_1d_pdf(key, target, dim= 2, min= -2, max= -2, m_points= 101):
+def gen_1d_pdf(key, target, target_dim=2, min=-2, max=2, m_points=101):
+    grid = gen_2grid(min, max, m_points, target_dim)
+    Z = target(grid)
+    rand_vec = jr.uniform(key, target_dim)
+    rand_vec_normed = jnp.expand_dims(rand_vec/jnp.linalg.norm(rand_vec), 1)
+    projmat_rand_vec = rand_vec_normed@rand_vec_normed.T@grid
+    
+
+def gen_w1_random_1d_pdf(key, target, dim= 2, min= -2, max= 2, m_points= 101):
     """
-    generate 1d vector for w1 metric
+    generate 1d vector for w1 metric. only works for gaussian right now
     """
     scale = jnp.expand_dims(jnp.linspace(min, max, m_points), 1)
     rand_vec = jr.uniform(key, dim)
