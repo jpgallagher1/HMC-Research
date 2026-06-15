@@ -5,7 +5,7 @@ __pycache__/
 CHMC_FALL_2025/*
 CHMC/scratch.ipynb
 CHMC/Sandbox/*
-CHMC/pinnacles/*
 plots/*
 *.stdout
 mcmc_results/*
+*.out
