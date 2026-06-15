@@ -63,7 +63,7 @@ def himmelblau(q):
 def fourpeaks(q):
     "coefficient is computed numerically using desmos... https://www.desmos.com/calculator/uk3ixhdkah"
 
-    assert q.shape == (2,), 'q must be 2 dim'
+    # assert q.shape == (2,), 'q must be 2 dim'
     x,y = q[0], q[1]
     log_density = -0.5*((x**2+y-2)**2+(x+y**2-2)**2)
     return 1/3.90992630367*jnp.exp(log_density)
