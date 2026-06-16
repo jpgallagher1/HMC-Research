@@ -154,7 +154,7 @@ def gen_leapfrog_old(
 
 def midptNewtonFPI_step(
         qp: QP,
-        gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
+        gradH: Callable[[QP], QP],
         config: IntegratorConfig,
         solve: Callable = jnp.linalg.solve
 ) -> tuple[QP, IntegratorState]:
@@ -169,22 +169,25 @@ def midptNewtonFPI_step(
     x: FPI flat vector 
     y: FPI (Newton) flat vector
     """
-    x0 = qp.to_array()
+    x0 = qp
     
     def G(y):
         """
         Fixed point map: G(y) = x0 + τ J ∇H(0.5(x0 + y))
         """
         midpoint = 0.5 * (x0 + y)
-        grad_mid = gradH_flat(midpoint)
-        return x0 + config.τ * J_sym(QP.from_array(grad_mid)).to_array()
+        grad_mid = gradH(midpoint)
+        return x0 + config.τ * J_sym(grad_mid)
     
     def F(y):
-        return y - G(y)
+        """
+        I think I need arrays here instead of QP objects like arrays
+        """
+        return y.x - G(y).x
     
     def newton_step(y):
         jacF = jax.jacobian(F)
-        return x0 - solve(jacF(y), F(y))
+        return QP(x0.x - jnp.linalg.solve(jacF(y).x, F(y)))
     
     def cond(carry):
         """bool for while err> tol and iter< max_iter"""
@@ -198,14 +201,13 @@ def midptNewtonFPI_step(
         return [i +1, newton_step(y)]
     
     # newton iteration
-    n_iter, qp_out_flat = jax.lax.while_loop(cond, body_step, [0, x0])
+    n_iter, qp_out = jax.lax.while_loop(cond, body_step, [0, x0])
 
-    qp_out = QP.from_array(qp_out_flat)
-    residual = F(qp_out_flat)
+    residual = F(qp_out)
     res_norm = jnp.linalg.norm(residual)
     state = IntegratorState(
         qp = qp_out,
-        residual= QP.from_array(residual),
+        residual= QP(residual),
         step_size= config.τ,
         n_iter = n_iter,
         converged = res_norm<= config.tol,
@@ -215,7 +217,7 @@ def midptNewtonFPI_step(
 
 def midptNewtonFPI_integrate(
     qp: QP,
-    gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
+    gradH: Callable[[QP], QP],
     config: IntegratorConfig,
     solve: Callable = jnp.linalg.solve
 ) -> QP:
@@ -231,23 +233,22 @@ def midptNewtonFPI_integrate(
         Final state after N steps
     """
     def body_fn(qp_state, _):
-        qp_new, state = midptNewtonFPI_step(qp_state, gradH_flat, config, solve)
+        qp_new, state = midptNewtonFPI_step(qp_state, gradH, config, solve)
         return qp_new, state
     qp_final, states = jax.lax.scan(body_fn, qp, None, length=config.N)
     return qp_final
 
 def gen_midptNewtonFPI(
-        gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
+        gradH: Callable[[QP], QP],
         config: IntegratorConfig,
         solve: Callable = jnp.linalg.solve,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """
     Generate implicit midpt FPI integrator using flat arrays
     """
-    def midptFPI_T(qp_flat: jnp.ndarray) -> jnp.ndarray:
-        qp = QP.from_array(qp_flat)
-        qp_out = midptNewtonFPI_integrate(qp, gradH_flat, config, solve)
-        return qp_out.to_array()
+    def midptFPI_T(qp: QP) -> QP:
+        qp_out = midptNewtonFPI_integrate(qp, gradH, config, solve)
+        return qp_out
     
     return midptFPI_T
 
