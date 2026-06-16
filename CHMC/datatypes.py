@@ -11,20 +11,40 @@ Version: 0.1
 All modules import from here to ensure type consistency and avoid indexing bugs.
 """
 from typing import NamedTuple, Callable
+import jax
 import jax.numpy as jnp
+from dataclasses import dataclass
 
-class QP(NamedTuple):
-    """Phase space state(q,p)"""
-    q: jnp.ndarray # position
-    p: jnp.ndarray # momentum
+@jax.tree_util.register_dataclass
+@dataclass(frozen=True)
+class QP:
+## partially generated with claude input ##
+    x: jnp.ndarray                          # the ONLY leaf — shape (..., 2*dim)
+
+    # views, for reading/debugging only
+    @property
+    def dim(self): return self.x.shape[-1] // 2
 
     @property
-    def dim(self) -> int:
-        """Dimension of configuration space"""
-        return self.q.shape[0]
+    def q(self):   return self.x[..., : self.dim]
+    @property
+    def p(self):   return self.x[..., self.dim :]
+
+    @classmethod
+    def from_qp(cls, q, p):                  # ergonomic constructor
+        return cls(jnp.concatenate([q, p], axis=-1))
+
+    # the object *is* the flat vector
+    def __add__(s, o):  return QP(s.x + (o.x if isinstance(o, QP) else o))
+    def __sub__(s, o):  return QP(s.x - (o.x if isinstance(o, QP) else o))
+    def __mul__(s, o):  return QP(s.x * (o.x if isinstance(o, QP) else o))
+    def __rmul__(s, o): return QP(o * s.x)
+    def __neg__(s):     return QP(-s.x)
+    def symplectic(s):  return QP.from_qp(s.p, -s.q)   # J·x = [p, -q]
+
     def to_array(self) -> jnp.ndarray:
         """Convert to flat array [q,p] for compatability with old code"""
-        return jnp.concatenate([self.q, self.p])
+        return self.x
     @classmethod
     def from_array(cls, arr: jnp.ndarray):
         """Convert from flat array[q,p]"""
@@ -65,6 +85,8 @@ class IntegratorConfig (NamedTuple):
     tol: float = 1e-2 # Tolerance of implicit method
     max_iter: int = 3 # Max Newton iter
     constant_p: bool = False # used in sampler
+    n_pts: int = 4 # THIS IS NEW ####
+    trajectory: bool = False # THIS IS NEW ####
 
 # Type aliases for clarity
 TargetDensity = Callable[[jnp.ndarray], float]

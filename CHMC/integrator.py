@@ -15,7 +15,7 @@ from typing import Callable
 from datatypes import QP, IntegratorState, IntegratorConfig
 from hamiltonian import J_sym, qJ_sym, pJ_sym, J_sym_flat
 
-def lf_step(
+def lf_step_qp(
         qp: QP,
         gradH: Callable[[QP], QP],
         τ: float
@@ -26,22 +26,23 @@ def lf_step(
     Does p-first 
 
     note: that gradH is handled at hamiltonian specification
+    lol claude can't do math.
     """
     # Half step momentum
     grad = gradH(qp)
-    p_half = qp.p - 0.5 * τ * grad.q
-    qp_half = QP(q = qp.q, p = p_half)
+    qhalf= qp.q + 0.5 * τ * grad.symplectic().q
+    qhalf_p0 = QP.from_qp(q = qhalf, p = qp.p)
 
     # Full step position
-    grad_half = gradH(qp_half)
-    q_new = qp.q + 0.5 * τ * grad_half.p
-    qp_new_q = QP(q = q_new, p = p_half)
+    grad_half = gradH(qhalf_p0)
+    p_new = qp.p + τ * grad_half.symplectic().p
+    qhalf_pnew = QP.from_qp(q = qhalf, p = p_new)
 
     # Half step momentum
-    grad_new = gradH(qp_new_q)
-    p_new = p_half - 0.5 * τ * grad_new.q
+    grad_new = gradH(qhalf_pnew)
+    q_new = qhalf + 0.5 * τ * grad_new.symplectic().q
 
-    return QP(q=q_new, p=p_new)
+    return QP.from_qp(q=q_new, p=p_new)
 
 def lf_step_flat(
     qp_flat: jnp.ndarray,
@@ -63,28 +64,27 @@ def lf_step_flat(
     Returns:
         Updated flat array
     """
-    qp = QP.from_array(qp_flat)
-    grad_qp = QP.from_array(gradH_flat(qp_flat))
+    qp = QP(qp_flat)
+    grad_qp = QP(gradH_flat(qp_flat))
     
     # Half momentum step: p -= (τ/2) ∂H/∂q
     qhalf_p0 = qp.to_array() + 0.5 * τ * qJ_sym(grad_qp).to_array()
     
     # Full position step: q += τ ∂H/∂p
-    grad_half = QP.from_array(gradH_flat(qhalf_p0))
+    grad_half = QP(gradH_flat(qhalf_p0))
     qhalf_pout = qhalf_p0 + τ * pJ_sym(grad_half).to_array()
     
     # Half momentum step: p -= (τ/2) ∂H/∂q
-    grad_out = QP.from_array(gradH_flat(qhalf_pout))
+    grad_out = QP(gradH_flat(qhalf_pout))
     qp_out = qhalf_pout + 0.5 * τ * qJ_sym(grad_out).to_array()
     
     return qp_out
 
-@partial(jax.jit, static_argnames=['N'])
+# @partial(jax.jit, static_argnames=['N'])
 def lf_integrate(
     qp: QP,
     gradH: Callable[[QP], QP],
-    τ: float,
-    N: int
+    config: IntegratorConfig
 ) -> QP:
     """
     LF integration using scan.
@@ -99,13 +99,40 @@ def lf_integrate(
         Final state after N steps
     """
     def body_fn(qp_state, _):
-        qp_new = lf_step(qp_state, gradH, τ)
+        qp_new = lf_step_qp(qp_state, gradH, config.τ)
         return qp_new, None
     
-    qp_final, _ = jax.lax.scan(body_fn, qp, None, length=N)
+    qp_final, _ = jax.lax.scan(body_fn, qp, None, length=config.N)
     return qp_final
 
 def gen_leapfrog(
+        gradH: Callable[[QP], QP],
+        config: IntegratorConfig
+    ) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """
+    gradH: Hamiltonian gradient
+    config.τ: Step size
+    config.N: Number of steps"""
+    def leapfrog_qp(
+            qp_in: QP
+        ) -> QP:
+        """
+        LF integration using scan.
+        
+        Args:
+            qp_flat: Initial state            
+        Returns:
+            Final state after N steps
+        """
+        def body_fn(qp_state, _):
+            qp_new = lf_step_qp(qp_state, gradH, config.τ)
+            return qp_new, None
+        
+        qp_final, _ = jax.lax.scan(body_fn, qp_in, None, length=config.N)
+        return qp_final
+    return leapfrog_qp
+
+def gen_leapfrog_old(
     gradH_flat: Callable[[jnp.ndarray], jnp.ndarray],
     config: IntegratorConfig
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
