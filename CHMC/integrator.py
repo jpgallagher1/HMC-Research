@@ -9,11 +9,13 @@ Last Modified: 2026-02-16
 Version: 0.1
 """
 import jax
+from jax import vmap
 import jax.numpy as jnp
 from functools import partial
 from typing import Callable
 from datatypes import QP, IntegratorState, IntegratorConfig
 from hamiltonian import J_sym, qJ_sym, pJ_sym, J_sym_flat
+from scipy.special import roots_legendre
 
 def lf_step_qp(
         qp: QP,
@@ -284,55 +286,98 @@ def gauss4(a: float,
     Xout = β1*jnp.array([x0, x1, x2, x3])+β0
     Wout = β1*jnp.array([w0, w1, w2, w3])
     return Xout, Wout
-def gen_AVF(gradH, config):
-    ti, wi = gauss4(0,1)
+def gen_AVF(gradH_flat, config):
+    """
+    ****USES gradH_flat*****
+    """
+    roots, weights = roots_legendre(config.n_pts)
+    a, b = 0, 1
+    β1 = (b-a)/2
+    β0 = (a+b)/2
+    ti = β1*roots+β0
+    wi = β1*weights
+
     def AVF(qp0: QP,
             qp1: QP,
-            ):
+            )-> QP:
         """Implementing AVF 
         qp_{n+1} = qp_n + τ * J vmap(∇H)((qp_n + qp_{n+1}))
 
         This is numerical implementation but i'll likely need to do some more solving for gradH_flat
         """
-        
-        x0 = qp0.to_array()
-        X0 = jnp.expand_dims(x0, -1)
-        X1 = jnp.expand_dims(qp1.to_array(), -1)
+        X0 = jnp.expand_dims(qp0.x, -1)
+        X1 = jnp.expand_dims(qp1.x, -1)
         X = X0+ ti*(X1-X0)
-        vgradH = jax.vmap(gradH, in_axes=-1)
-        x_out = x0 + config.τ* J_sym_flat(wi@ vgradH(X))
-        return QP.from_array(x_out)
+        vgradH = vmap(gradH_flat, in_axes=-1)
+        x_out = qp0 + config.τ* J_sym(QP(wi@ vgradH(X)))
+        return x_out
     return AVF
 def gen_FPI(func, config):
+    """
+    Possible todo: update the carry to use the IntegratorState NamedTuple
+    """
     def FPI(carry, xs):
         xn = carry
         xn1 = func(xn, xn)
         def cond(carry):
             """bool for while err> tol and iter< max_iter"""
             i, x, y = carry
-            residual_q = y.q - x.q
-            residual_p = y.p - x.p
-
-            err = jnp.sqrt(
-                jnp.sum(residual_q**2) +
-                jnp.sum(residual_p**2))
-            # residual = y.to_array()-x.to_array()
+            err = jnp.linalg.norm(y.x-x.x)
             # err = jnp.linalg.norm(residual)
             return (err > config.tol) & (i< config.max_iter)
         def body_step(carry):
             i, x, y = carry
-            return (i +1, y, func(xn, y))
-        n_iter, _, x_next = jax.lax.while_loop(cond, body_step, (1, xn, xn1))
-        return x_next, x_next
+            return (i+1, y, func(xn, y))
+        n_iter, x_last, x_next = jax.lax.while_loop(cond, body_step, (1, xn, xn1))
+        resid = jnp.linalg.norm(x_next.x - x_last.x)
+        return x_next, (x_next, n_iter, resid)     # scan now iters & residual per step
     return FPI
-def gen_AVF_FPI_T(F_flat, config):
-    AVF_FPI = gen_FPI(gen_AVF(F_flat, config), config)
+
+def gen_AVF_FPI_T(gradH_flat, config):
+    """
+    debug returns all scan outputs: 
+        final_state, (traj, iters, resids)
+    """
+    AVFfunc = gen_AVF(gradH_flat, config)
+    AVF_FPI = gen_FPI(AVFfunc, config)
     def AVF_FPI_T(θω_init):
-        final_state, trajectory = jax.lax.scan(
+        final_state, (traj, iters, resids)  = jax.lax.scan(
             AVF_FPI,
             θω_init,
             None,
             length=config.N,
         )
-        return trajectory
+        if config.debug:
+            return final_state, traj, iters, resids 
+        else:
+            return final_state
     return AVF_FPI_T
+
+def gen_AVF_NewtonFPI_T(gradH_flat, config):
+    AVF = gen_AVF(gradH_flat, config)
+    def AVF_newton_t(qp: QP, _) -> QP:
+        x0 = qp
+        def F(yx): return (QP(yx) - AVF(x0, QP(yx))).x   # flat residual R^n->R^n
+        jacF = jax.jacfwd(F)                             # square system
+
+        def cond(carry):
+            i, _, dnorm = carry
+            return (dnorm > config.tol) & (i < config.max_iter)
+
+        def body(carry):
+            i, yx, _ = carry
+            dy = jnp.linalg.solve(jacF(yx), F(yx))     # Newton increment, this step
+            return i + 1, yx - dy, jnp.linalg.norm(dy)
+
+        n_iter, x_next, residual = jax.lax.while_loop(cond, body, (0, x0.x, jnp.inf))
+        return  QP(x_next), (n_iter, x_next, residual)
+    def integrate_T(qp_init):
+        def Newton_step(carry, _):
+            next = AVF_newton_t(carry, _)
+            return next
+        last, (iters, traj, resids) = jax.lax.scan(Newton_step, qp_init, None, config.N)
+        if config.debug:
+            return last, traj, iters, resids 
+        else:
+            return last
+    return integrate_T

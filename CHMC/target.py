@@ -5,11 +5,13 @@ Description:
 
 Author: John Gallagher
 Created: 2026-02-16
-Last Modified: 2026-02-16
+Last Modified: 2026-06-22
 Version: 0.1
 """
 import jax.numpy as jnp
 from datatypes import TargetDensity, PrecisionMatrix
+from jax.scipy.special import gamma #output should be compatible with Jax
+import jax.scipy.stats.gennorm as gennorm
 
 def gen_gaussian(
         dim: int = 2,
@@ -67,3 +69,17 @@ def fourpeaks(q):
     x,y = q[0], q[1]
     log_density = -0.5*((x**2+y-2)**2+(x+y**2-2)**2)
     return 1/3.90992630367*jnp.exp(log_density)
+def gen_p_gauss_pdf(β=4):
+    """
+    multivariate generalized gaussian distribution 
+
+
+    DID NOT USE jax.scipy.stats.gennorm.pdf
+    may not be as performant as hand implementation. 
+    """
+    def p_gauss_pdf(vec):
+        log_density = -jnp.sum(vec**β)**(1/β)
+        return β/(2*gamma(1/β))*jnp.exp(log_density)
+    return p_gauss_pdf
+
+

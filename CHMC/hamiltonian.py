@@ -10,6 +10,7 @@ Version: 0.1
 """
 from typing import NamedTuple, Callable
 import jax
+from jax import custom_jvp
 import jax.numpy as jnp
 from datatypes import QP, HamiltonianState, TargetDensity, MassMatrix, PrecisionMatrix
 
@@ -68,6 +69,24 @@ def J_sym_flat(vec) -> jnp.array:
     return outvec
 
 # Hamiltonian constructors
+def p_gauss_hamiltonian(
+        β,
+        mass_inv: MassMatrix
+)-> Callable[[QP], float]:
+    """
+    Hamiltonian(q,p) = U(q) + K(p)
+    For p_gass HMC: 
+        U(q) = -log π(q) = sum(q.^β)/β
+        K(p) = 0.5 *  p.T@ M^{-1}@ p
+    """
+    def hamiltonian(qp:QP) -> float:
+        U = jnp.sum(qp.q**β)/β
+        if mass_inv is not None:
+            K = 0.5*jnp.dot(qp.p, mass_inv@qp.p)
+        else:
+            K = 0.5*jnp.sqrt(jnp.sum(qp.p**2))
+        return U+K
+    return hamiltonian
 
 def standard_hamiltonian(
     target: TargetDensity,
@@ -82,7 +101,10 @@ def standard_hamiltonian(
 
     def hamiltonian(qp:QP) -> float:
         U = -jnp.log(target(qp.q))
-        K = 0.5*jnp.dot(qp.p, mass_inv@qp.p)
+        if mass_inv is not None:
+            K = 0.5*jnp.dot(qp.p, mass_inv@qp.p)
+        else:
+            K = 0.5*jnp.sqrt(jnp.sum(qp.p**2))
         return U+K
     return hamiltonian
 
@@ -105,6 +127,7 @@ def gaussian_hamiltonian(
 
 def hamiltonian_from_flat(H_flat: Callable[[jnp.ndarray], float]) -> Callable[[QP], float]:
     """
+    DEPRICATED**
     Convert a flat-array Hamiltonian to QP-based Hamiltonian
     
     Useful for legacy code compatibility.

@@ -48,8 +48,8 @@ class QP:
     @classmethod
     def from_array(cls, arr: jnp.ndarray):
         """Convert from flat array[q,p]"""
-        dim = arr.shape[0]//2
-        return cls(q=arr[:dim], p=arr[dim:])
+        # dim = arr.shape[0]//2 # depricated and largely unused now. 
+        return cls(arr)
 
 class HamiltonianState(NamedTuple):
     """State for Hamiltonian evaluation"""
@@ -85,8 +85,10 @@ class IntegratorConfig (NamedTuple):
     tol: float = 1e-2 # Tolerance of implicit method
     max_iter: int = 3 # Max Newton iter
     constant_p: bool = False # used in sampler
+    integrator: str = 'midptNewtonFPI'
     n_pts: int = 4 # THIS IS NEW ####
     trajectory: bool = False # THIS IS NEW ####
+    debug: bool = False
 
 # Type aliases for clarity
 TargetDensity = Callable[[jnp.ndarray], float]

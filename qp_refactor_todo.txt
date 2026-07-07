@@ -1,0 +1,120 @@
+John Gallagher
+**Generated with Claude, from my outline**
+
+CHMC: HMC-Online
+|- core.py contains core hamiltonian structures
+|- target.py generates $\pi(q)$ pdfs
+|- integrator.py contains numerical integrators for hamiltonians
+|- sampler.py contains sampler logic
+|- metrics.py contains analytics of chains
+|- tests/ contains tests for old/new QP object, Integrators, Sampler
+|- plotting.py contains plotting functionality for metrics
+
+
+June 16, 2026
+QP single-leaf refactor (the "B" design) + AVF test suite from the double-pendulum notebooks.
+Migrate QP from the two-leaf NamedTuple to a single-leaf, registered, frozen dataclass,
+then lock the numerics with tests promoted from _sai.ipynb / dp2qp.ipynb.
+
+Conventions assumed by every step:
+    - jax_enable_x64 on. None of the energy tolerances are reachable in float32.
+    - test config: IntegratorConfig(τ=0.2, T=1.0, N=5, tol=1e-2, max_iter=2, n_pts=6)
+    - θω_init = QP(jnp.array([0.25*jnp.pi, -1.25*jnp.pi, -0.2, 0.5]))
+    - golden arrays live in tests/data/
+    - tol_E is read off the Phase 0 baseline run, not guessed.
+✓
+Phase 0 - Baselines (capture BEFORE editing anything; old two-leaf QP must still exist)
+    ✓ write tests/make_golden.py; integrate gen_leapfrog (fixed seed, Gaussian H, test config),
+    ✓  save trajectory to tests/data/golden_leapfrog.npy
+    ✓ extend make_golden.py to run current midptNewtonFPI_integrate on the same setup,
+    ✓  save to tests/data/golden_midpt.npy
+    ✓ from _sai.ipynb (old-QP AVF-FPI) integrate the double pendulum at the test config,
+    ✓  save trajectory.to_array() to tests/data/golden_avf_dp.npy, print observed max‖ΔH‖ to fix tol_E
+
+Phase 1 - New QP (datatypes.py)
+    ✓ replace QP with single-leaf frozen dataclass: x leaf, @register_dataclass,
+      dim via x.shape[-1]//2, .q/.p views, from_qp
+    ✓ add arithmetic: __add__, __sub__, __neg__; __mul__/__rmul__ scalar-only, raise TypeError on a QP operand
+    ✓ add .symplectic() returning from_qp(p, -q)
+    ✓ add transitional shims to_array → self.x and from_array → cls(arr), tagged # TODO remove after migration
+    ✓ add n_pts: int = 4 to IntegratorConfig (AVF quadrature needs it)
+
+Phase 2 - Migrate QP(q=..., p=...) sites (constructor signature changed)
+    ✔ grep -rn 'QP(q=' . to enumerate every call site
+
+  grep -rn 'QP(q=' .
+./CHMC/integrator.py:44:    return QP(q=q_new, p=p_new)
+./CHMC/tests.py:25:        arr = QP(q=q, p=p).to_array()
+./CHMC/tests.py:33:        assert QP(q=q, p=p).dim == 5
+./CHMC/tests.py:48:        result = J_sym(QP(q=q, p=p))
+./CHMC/tests.py:55:        result = qJ_sym(QP(q=q, p=p))
+./CHMC/tests.py:62:        result = pJ_sym(QP(q=q, p=p))
+./CHMC/tests.py:70:        qp = QP(q=jnp.zeros(2), p=jnp.zeros(2))
+./CHMC/tests.py:77:        qp = QP(q=jnp.ones(2), p=jnp.ones(2))
+./CHMC/tests.py:95:        qp0_flat = QP(q=q0, p=p0).to_array()
+./CHMC/tests.py:135:        qp0_flat = QP(q=jnp.array([1.0, 0.0]), p=jnp.array([0.0, 1.0])).to_array()
+./CHMC/tests.py:143:        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
+./CHMC/tests.py:150:        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
+./CHMC/sampler.py:38:        return QP(q=qp.q, p = p_new), None
+./CHMC/sampler.py:54:        return QP(q=qp.q, p=p_new), None
+./CHMC/sampler.py:75:    return QP(q=qp.q, p=p_new), None
+./CHMC/hamiltonian.py:40:        return QP(q=self.grad_q(qp), p=self.grad_p(qp))
+./CHMC/hamiltonian.py:54:    return QP(q=qp.p, p=jnp.zeros_like(qp.q))
+./CHMC/hamiltonian.py:60:    return QP(q=jnp.zeros_like(qp.p), p=-qp.q)
+./docs/superpowers/plans/2026-05-22-test-suite.md:84:        arr = QP(q=q, p=p).to_array()
+./docs/superpowers/plans/2026-05-22-test-suite.md:92:        assert QP(q=q, p=p).dim == 5
+./docs/superpowers/plans/2026-05-22-test-suite.md:134:        result = J_sym(QP(q=q, p=p))
+./docs/superpowers/plans/2026-05-22-test-suite.md:141:        result = qJ_sym(QP(q=q, p=p))
+./docs/superpowers/plans/2026-05-22-test-suite.md:148:        result = pJ_sym(QP(q=q, p=p))
+./docs/superpowers/plans/2026-05-22-test-suite.md:156:        qp = QP(q=jnp.zeros(2), p=jnp.zeros(2))
+./docs/superpowers/plans/2026-05-22-test-suite.md:163:        qp = QP(q=jnp.ones(2), p=jnp.ones(2))
+./docs/superpowers/plans/2026-05-22-test-suite.md:225:        qp0_flat = QP(q=q0, p=p0).to_array()
+./docs/superpowers/plans/2026-05-22-test-suite.md:292:        qp0_flat = QP(q=jnp.array([1.0, 0.0]), p=jnp.array([0.0, 1.0])).to_array()
+./docs/superpowers/plans/2026-05-22-test-suite.md:300:        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
+./docs/superpowers/plans/2026-05-22-test-suite.md:307:        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
+
+    - hamiltonian.py: rewrite J_sym, qJ_sym, pJ_sym via from_qp / jnp.concatenate
+    Stuck here.
+
+    gen_leapfrog doesn't create the same location
+    gen_leapfrog_old == golden_lf
+
+
+    - hamiltonian.py: rewrite Hamiltonian.grad (and the grad_q/grad_p packing) via from_qp
+    - integrator.py: rewrite the QP(q=,p=) constructions inside lf_step via from_qp
+    - sampler.py: rewrite draw_momentum via from_qp
+    - confirm standard_hamiltonian / gaussian_hamiltonian need no change (they only read .q/.p)
+
+Phase 3 - Parity gate for the existing integrators
+    - run gen_leapfrog with new QP + shims; assert allclose vs golden_leapfrog.npy
+    - run midptNewtonFPI_integrate with new QP + shims; assert allclose vs golden_midpt.npy
+
+Phase 4 - Promote the AVF integrator into integrator.py
+    - copy clean gen_AVF (Gauss-Legendre nodes built once); import QP from datatypes
+    - copy gen_FPI + gen_AVF_FPI_T (use config.N; increment-norm convergence)
+    - copy final gen_AVF_NewtonFPI (increment-norm Δy, ∞-seeded carry, AVF hoisted) + gen_AVF_NewtonFPI_T
+    - do NOT port J_sym_flat (broken kwargs), gen_AVF_Newton_t (incomplete stub), or the stale
+      AVF_NewtonFPI_integrate cell
+
+Phase 5 - Test suite
+    - tests/conftest.py: enable x64; fixtures for double-pendulum H / gradH_flat, test config,
+      θω_init, golden-array loaders
+    - tests/test_qp.py: single-leaf pytree (len(tree_leaves)==1 + flatten/unflatten round-trip);
+      vmap over a batch yields correct dim/shape; QP * QP raises TypeError
+    - tests/test_quadrature.py: AVF integral vs scipy quad_vec, parametrized over n_pts, error decreasing
+    - tests/test_avf.py::test_step_advances_and_conserves: one step - ‖x₁-x₀‖ > 0 AND ‖ΔH‖ < tol_E
+    - tests/test_avf.py::test_trajectory_energy: full run - max‖ΔH‖ < tol_E AND position spread > 0
+      (guards against a frozen trajectory)
+    - tests/test_avf.py::test_fpi_newton_agree: gen_AVF_FPI_T vs gen_AVF_NewtonFPI trajectories allclose
+    - tests/test_parity.py: new AVF stack reproduces golden_avf_dp.npy
+
+Phase 6 - Cleanup (rerun the suite after each item)
+    - collapse lf_step / lf_step_flat into one single-leaf step (qp.x IS the flat vector)
+    - rewrite midptNewtonFPI_step using .x and .symplectic(); drop the to_array/from_array round-trip
+    - replace remaining to_array/from_array at call sites (sampler kernels, gen_*_T, sweep H_flat lambda)
+      with .x / QP(...)
+
+Phase 7 - Remove shims
+    - grep confirms no to_array / from_array callers remain
+    - delete the shims from QP
+    - full suite green + short sweep170:10:220_τ smoke run (small κ, small lens) for end-to-end reproducibility
