@@ -7,6 +7,27 @@ CHMC: HMC-Online
 |- metrics.py contains analytics of chains
 |- tests/ contains tests for old/new QP object, Integrators, Sampler
 |- plotting.py contains plotting functionality for metrics
+July 7, 2026
+Import the implementation of diagonal only scalar QP. 
+
+✔Today, validate the implemntation of scalar qp. 
+Currently stuck on gradient/hessian operations within the AVF framework. 
+
+Okay going line by line for Newton's method for AVF
+✔ x0 
+x AVF(x0, qp) FOUND THE ERROR!!! QP(X.T) WAS INCORRECTLY TRANSPOSED giving shape (n_pts, 2n) instead of (2n, n_pts)
+✔ F(yx)
+✔ jacF
+    ✔ Hamiltonian
+    ✔ Gradient
+    ✔ Hessian
+    ✔ Jacobian
+
+
+Updated (a while ago) the qp object to be a single array for quicker operations. 
+
+July 1, 2026
+experiments_on_gradients.txt
 
 June 16, 2026
 Haven't updated the todo in a while. 

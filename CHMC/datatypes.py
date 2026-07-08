@@ -88,6 +88,7 @@ class IntegratorConfig (NamedTuple):
     integrator: str = 'midptNewtonFPI'
     n_pts: int = 4 # THIS IS NEW ####
     trajectory: bool = False # THIS IS NEW ####
+    gen_gauss: bool = False
     debug: bool = False
 
 # Type aliases for clarity

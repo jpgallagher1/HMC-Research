@@ -1,5 +1,6 @@
 John Gallagher
 **Generated with Claude, from my outline**
+I think i'm done with this as of june 24, 2026
 
 CHMC: HMC-Online
 |- core.py contains core hamiltonian structures
@@ -12,6 +13,7 @@ CHMC: HMC-Online
 
 
 June 16, 2026
+Working in qp_array branch
 QP single-leaf refactor (the "B" design) + AVF test suite from the double-pendulum notebooks.
 Migrate QP from the two-leaf NamedTuple to a single-leaf, registered, frozen dataclass,
 then lock the numerics with tests promoted from _sai.ipynb / dp2qp.ipynb.
@@ -61,33 +63,17 @@ Phase 2 - Migrate QP(q=..., p=...) sites (constructor signature changed)
 ./CHMC/hamiltonian.py:40:        return QP(q=self.grad_q(qp), p=self.grad_p(qp))
 ./CHMC/hamiltonian.py:54:    return QP(q=qp.p, p=jnp.zeros_like(qp.q))
 ./CHMC/hamiltonian.py:60:    return QP(q=jnp.zeros_like(qp.p), p=-qp.q)
-./docs/superpowers/plans/2026-05-22-test-suite.md:84:        arr = QP(q=q, p=p).to_array()
-./docs/superpowers/plans/2026-05-22-test-suite.md:92:        assert QP(q=q, p=p).dim == 5
-./docs/superpowers/plans/2026-05-22-test-suite.md:134:        result = J_sym(QP(q=q, p=p))
-./docs/superpowers/plans/2026-05-22-test-suite.md:141:        result = qJ_sym(QP(q=q, p=p))
-./docs/superpowers/plans/2026-05-22-test-suite.md:148:        result = pJ_sym(QP(q=q, p=p))
-./docs/superpowers/plans/2026-05-22-test-suite.md:156:        qp = QP(q=jnp.zeros(2), p=jnp.zeros(2))
-./docs/superpowers/plans/2026-05-22-test-suite.md:163:        qp = QP(q=jnp.ones(2), p=jnp.ones(2))
-./docs/superpowers/plans/2026-05-22-test-suite.md:225:        qp0_flat = QP(q=q0, p=p0).to_array()
-./docs/superpowers/plans/2026-05-22-test-suite.md:292:        qp0_flat = QP(q=jnp.array([1.0, 0.0]), p=jnp.array([0.0, 1.0])).to_array()
-./docs/superpowers/plans/2026-05-22-test-suite.md:300:        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
-./docs/superpowers/plans/2026-05-22-test-suite.md:307:        new_qp, _ = draw_momentum(QP(q=q, p=p), key)
 
-    - hamiltonian.py: rewrite J_sym, qJ_sym, pJ_sym via from_qp / jnp.concatenate
-    Stuck here.
-
-    gen_leapfrog doesn't create the same location
-    gen_leapfrog_old == golden_lf
-
-
-    - hamiltonian.py: rewrite Hamiltonian.grad (and the grad_q/grad_p packing) via from_qp
-    - integrator.py: rewrite the QP(q=,p=) constructions inside lf_step via from_qp
-    - sampler.py: rewrite draw_momentum via from_qp
-    - confirm standard_hamiltonian / gaussian_hamiltonian need no change (they only read .q/.p)
+    ✔ hamiltonian.py: rewrite J_sym, qJ_sym, pJ_sym via from_qp / jnp.concatenate
+    ✔ hamiltonian.py: rewrite Hamiltonian.grad (and the grad_q/grad_p packing) via from_qp DID NOT USE
+    ✔ integrator.py: rewrite the QP(q=,p=) constructions inside lf_step via from_qp
+    ✔ integrator.py: rewrite the QP(q=,p=) constructions inside midptNewtonFPI_step_step via from_qp
+    ✔ sampler.py: rewrite draw_momentum via from_qp
+    ✔ confirm standard_hamiltonian / gaussian_hamiltonian need no change (they only read .q/.p)
 
 Phase 3 - Parity gate for the existing integrators
-    - run gen_leapfrog with new QP + shims; assert allclose vs golden_leapfrog.npy
-    - run midptNewtonFPI_integrate with new QP + shims; assert allclose vs golden_midpt.npy
+    ✔ run gen_leapfrog with new QP + shims; assert allclose vs golden_leapfrog.npy
+    ✔ run midptNewtonFPI_integrate with new QP + shims; assert allclose vs golden_midpt.npy
 
 Phase 4 - Promote the AVF integrator into integrator.py
     - copy clean gen_AVF (Gauss-Legendre nodes built once); import QP from datatypes

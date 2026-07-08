@@ -84,7 +84,7 @@ def p_gauss_hamiltonian(
         if mass_inv is not None:
             K = 0.5*jnp.dot(qp.p, mass_inv@qp.p)
         else:
-            K = 0.5*jnp.sqrt(jnp.sum(qp.p**2))
+            K = 0.5*jnp.sum(qp.p**2)
         return U+K
     return hamiltonian
 
@@ -104,7 +104,7 @@ def standard_hamiltonian(
         if mass_inv is not None:
             K = 0.5*jnp.dot(qp.p, mass_inv@qp.p)
         else:
-            K = 0.5*jnp.sqrt(jnp.sum(qp.p**2))
+            K = 0.5*jnp.sum(qp.p**2)
         return U+K
     return hamiltonian
 

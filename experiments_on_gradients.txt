@@ -1,0 +1,30 @@
+July 7, 2026
+Done
+
+July 1, 2026
+goal: generate the entrywise second derivative of the hamiltonian: 
+H(x) =  1/β * q**β + 0.5*p**2
+∇H =  [q**(β-1), p]
+June 25, 2026
+
+
+Some experiments on hard coding gradients for the hamiltonian to reduce flop counts.
+
+https://docs.jax.dev/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html
+
+Why is this important? Numerical stability, computational efficiency: 
+https://docs.jax.dev/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html#example-numerical-stability
+
+def log1pexp(x):
+  return jnp.log(1. + jnp.exp(x))
+
+I think i can hard code the computation as a vmap and get much faster computations. 
+
+The gradients are already known so I can just supply that directly. 
+
+The hessian has structure
+
+[I, τH_pp],
+[-τH_qq, I]
+
+which τH_pp = τ, because H_pp is quadratic and τH_qq = τ(β-1)q^(β-2) are diagonal here, or have specific structure.  

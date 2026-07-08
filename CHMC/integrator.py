@@ -126,12 +126,16 @@ def gen_leapfrog(
         Returns:
             Final state after N steps
         """
-        def body_fn(qp_state, _):
+        def body_fn(carry, _):
+            qp_state = carry
             qp_new = lf_step_qp(qp_state, gradH, config.τ)
-            return qp_new, None
+            return qp_new, qp_new
         
-        qp_final, _ = jax.lax.scan(body_fn, qp_in, None, length=config.N)
-        return qp_final
+        qp_final, traj = jax.lax.scan(body_fn, qp_in, None, length=config.N)
+        if config.debug:
+            return qp_final, traj
+        else:
+            return qp_final
     return leapfrog_qp
 
 def gen_leapfrog_old(
@@ -308,7 +312,8 @@ def gen_AVF(gradH_flat, config):
         X0 = jnp.expand_dims(qp0.x, -1)
         X1 = jnp.expand_dims(qp1.x, -1)
         X = X0+ ti*(X1-X0)
-        vgradH = vmap(gradH_flat, in_axes=-1)
+        vgradH = vmap(gradH_flat, in_axes=-1) #Array in, QP out...maybe not bet implementation
+
         x_out = qp0 + config.τ* J_sym(QP(wi@ vgradH(X)))
         return x_out
     return AVF
@@ -353,24 +358,165 @@ def gen_AVF_FPI_T(gradH_flat, config):
             return final_state
     return AVF_FPI_T
 
-def gen_AVF_NewtonFPI_T(gradH_flat, config):
+
+def gen_AVF_vecs(config):
+    """
+    
+    evaluation points for the AVF scheme
+    qp_{n+1} = qp_n + τ * J vmap(∇H)((qp_n + qp_{n+1}))
+    gives the vectors at the shifted lagrang nodes
+    for use in the vectorized gradient and jacobian. 
+    """
+    roots, weights = roots_legendre(config.n_pts)
+    a, b = 0, 1
+    β1 = (b-a)/2
+    β0 = (a+b)/2
+    ti = β1*roots+β0
+    wi = β1*weights
+    def AVF_vecs(qp0: QP,
+                 qp1: QP,
+                )-> QP:
+        """
+        in qp0, qp1
+        Out: X, wi, ti
+        """
+        X0 = jnp.expand_dims(qp0.x, -1)
+        X1 = jnp.expand_dims(qp1.x, -1)
+        X = X0+ ti*(X1-X0)
+        # apply QP(X.T) to have X.q and X.p behave correctly: 
+        # X.q 
+        return QP(X), wi, ti
+    return AVF_vecs
+
+def gen_gradH_gen_gauss(β):
+    """
+    H(x) =  1/β * q**β + 0.5*p**2
+    NO SYMPLECTIC MATRIX APPLIED
+    """
+    def gradH(qp):
+        """
+        H(x) =  1/β * q**β + 0.5*p**2
+        ∇H =  [q**(β-1), p]
+        """
+        return QP(jnp.concat([qp.q**(β-1), qp.p]))
+    return gradH
+def gen_jacH_gengauss(β):
+    """
+    H(x) =  1/β * q**β + 0.5*p**2
+    NO SYMPLECTIC MATRIX APPLIED
+    """
+    def jacH(qp):
+        """
+        diagonals only for separable hamiltonian of the form 
+        H(x) =  1/β * q**β + 0.5*p**2
+        with 
+        ∇**2 H =  [[(β-1)*q**(β-2), 0], 
+                            [0 , 1]]
+        """
+        return QP(jnp.concat([(β-1)*qp.q**(β-2),jnp.ones_like(qp.p)]))
+    return jacH
+# check that the jacH makes the same jacobian as jacfwd(AVF)
+def gen_AVF_jacF_diag(β, config):
+    """
+    Inputs: β, config
+    returns {τ J_sym @ Σ w_i *t_i * ∇**2 H (y)}
+
+    For separable hamiltonian of the form 
+    H(x) =  1/β * q**β + 0.5*p**2
+    with 
+    ∇**2 H =  [[(β-1)*q**(β-2), 0], 
+                        [0 , 1]]
+    F(y) = y - AVF(x0, y)
+    J_F(y) = I - {τ J_sym @ Σ w_i *t_i * ∇**2 H (y)}
+    returns the parenthesis portion as a single vector (the off diagonal component)
+    """
+
+    AVF_vecs = gen_AVF_vecs(config)
+    jacH_gg = gen_jacH_gengauss(β)
+    vjacH_gg = vmap(jacH_gg, in_axes=-1)
+
+
+    def jacF_AVF(x0, y):
+        """
+        returns {τ J_sym @ Σ w_i *t_i * ∇**2 H (y)}
+        of the approx form [[A, B], [C, D]] = JacF
+        where qp_out.q = diag(B), and qp_out.p = diag(C)
+        
+        
+        For separable hamiltonian of the form 
+        H(x) =  1/β * q**β + 0.5*p**2
+        with 
+        ∇**2 H =  [[(β-1)*q**(β-2), 0], 
+                            [0 , 1]]
+        F(y) = y - AVF(x0, y)
+        J_F(y) = I - {τ J_sym @ Σ w_i *t_i * ∇**2 H (y)}
+        returns the bracket portion as a single vector (the off diagonal component)
+        """
+        X, wi, ti = AVF_vecs(x0, y)
+        # X shape: (2n, config.npts) QP object
+        # wi shape: (config.npts,)
+        # ti shape: (config.npts,)
+        D_AVF = jnp.sum(wi*ti*vjacH_gg(X).x.T, axis=-1) 
+        qp_out = -config.τ*J_sym(QP(D_AVF))
+        return qp_out
+    return jacF_AVF
+
+# If [[a,b],[c,d]] = A, and by
+# then I have diag(b) and diag(c) and a, d = jnp.eye(dim)
+# I can solve in multiple ways: or I can u
+
+def solve2x2scalar(a,b,c,d,e,f):
+    """
+    this is the fastest solve for 2x2 Ax=b
+    [a,b],[c,d] = A
+    e,f = by
+    """
+    x2 = (a*f - e*c)/(a*d-b*c)
+    x1 = (e*d-b*f)/(a*d-b*c)
+    return x1, x2
+
+def gen_AVF_NewtonFPI_T(gradH_flat, config, β=4):
+    """
+    optional string: solve='gen_gauss'
+    then used for generalized-p-gauss
+    """
     AVF = gen_AVF(gradH_flat, config)
-    def AVF_newton_t(qp: QP, _) -> QP:
-        x0 = qp
-        def F(yx): return (QP(yx) - AVF(x0, QP(yx))).x   # flat residual R^n->R^n
-        jacF = jax.jacfwd(F)                             # square system
+    def cond(carry):
+        i, _, dnorm = carry
+        return (dnorm > config.tol) & (i < config.max_iter)
+    if config.gen_gauss:
+        jacF_x0_y = gen_AVF_jacF_diag(β, config)
+        vsol2x2 = vmap(solve2x2scalar, in_axes=(None, 0, 0, None, 0,0))
+        def AVF_newton_t(qp:QP, _)-> QP:
+            x0 = qp
+            def F(y:QP): 
+                return y - AVF(x0, y)   # flat residual R^n->R^n
+            jacF = lambda y: jacF_x0_y(x0, y) # QP object
 
-        def cond(carry):
-            i, _, dnorm = carry
-            return (dnorm > config.tol) & (i < config.max_iter)
+            def body(carry):
+                i, y, _ = carry # array or QP object?
+                Fyx = F(y)
+                diagjacFyx = jacF(y)
+                dq, dp = vsol2x2(1, diagjacFyx.q, diagjacFyx.p, 1, Fyx.q, Fyx.p)
+                dy = QP(jnp.hstack((dq,dp)))
+                return i+1, y-dy, jnp.linalg.norm(dy.x)
+            n_iter, x_next, residual = jax.lax.while_loop(cond, body, (0, x0, jnp.inf))
+            return x_next, (n_iter, x_next, residual)
+    else:
+        def AVF_newton_t(qp: QP, _) -> QP:
+            x0 = qp
+            def F(yx): 
+                return (QP(yx) - AVF(x0, QP(yx))).x   # flat residual R^n->R^n
+            jacF = jax.jacfwd(F)                             # square system
 
-        def body(carry):
-            i, yx, _ = carry
-            dy = jnp.linalg.solve(jacF(yx), F(yx))     # Newton increment, this step
-            return i + 1, yx - dy, jnp.linalg.norm(dy)
 
-        n_iter, x_next, residual = jax.lax.while_loop(cond, body, (0, x0.x, jnp.inf))
-        return  QP(x_next), (n_iter, x_next, residual)
+            def body(carry):
+                i, yx, _ = carry
+                dy = jnp.linalg.solve(jacF(yx), F(yx))     # Newton increment, this step
+                return i + 1, yx - dy, jnp.linalg.norm(dy)
+
+            n_iter, x_next, residual = jax.lax.while_loop(cond, body, (0, x0.x, jnp.inf))
+            return  QP(x_next), (n_iter, x_next, residual)
     def integrate_T(qp_init):
         def Newton_step(carry, _):
             next = AVF_newton_t(carry, _)
