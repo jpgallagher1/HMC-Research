@@ -56,13 +56,18 @@ def gen_τ_plots(
     i,
     dims: int,
     cond: list,
+    kappa=True,
+    dim=False,
     slope=False,
     avg=True,
     title="Cov Max Diag Err versus MCMC Iterations",
 ):
     plt.loglog(lens, chmc_metrics[i, :], "-*", color="C0", alpha=0.15)
     plt.loglog(lens, hmc_metrics[i, :], "-o", color="C1", alpha=0.15)
-    subtitle1 = f"\n$dim$ = {dims[0]}, $\\kappa$ = {cond: 0.2f}, $\\tau = $ {config.τ}, $N = $ {config.N}"
+    if kappa:
+        subtitle1 = f"\n$dim$ = {dims[0]}, $\\kappa$ = {cond: 0.2f}, $\\tau = $ {config.τ}, $N = $ {config.N}"
+    if dim and not kappa:
+        subtitle1 = f"\n$dim$ = {dims[i]}, $\\tau = $ {config.τ}, $N = $ {config.N}"
     if avg:
         avg_chmc = np.mean(chmc_metrics[i, :], axis=-1)
         plt.loglog(lens, avg_chmc, "-*", color="C0", label="avg CHMC", alpha=1)
