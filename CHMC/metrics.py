@@ -34,10 +34,16 @@ def cov(X):
     n=X.shape[0]
     return (X - Xμ).T@(X-Xμ)/(n-1)
 
+def cov_diag(X, sample_axis = 0, ddof = 1):
+    return jnp.var(X, axis=sample_axis, ddof = 1)
+
 def maxtracediff(X,Y) -> float:
     x = jnp.diag(X)
     y = jnp.diag(Y)
     return jnp.max(jnp.abs(x-y))
+
+def maxdiff(X,Y) -> float:
+    return jnp.max(jnp.abs(X-Y))
 
 def random_1d_projection(key, target_dim: int) -> tuple:
     x = jr.uniform(key, target_dim)
