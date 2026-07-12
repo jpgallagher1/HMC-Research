@@ -16,6 +16,7 @@ from typing import Callable
 from datatypes import QP, IntegratorState, IntegratorConfig
 from hamiltonian import J_sym, qJ_sym, pJ_sym, J_sym_flat
 from scipy.special import roots_legendre
+from jaxopt import AndersonAcceleration
 
 def lf_step_qp(
         qp: QP,
@@ -314,7 +315,7 @@ def gen_AVF(gradH_flat, config):
         X = X0+ ti*(X1-X0)
         vgradH = vmap(gradH_flat, in_axes=-1) #Array in, QP out...maybe not bet implementation
 
-        x_out = qp0 + config.τ* J_sym(QP(wi@ vgradH(X)))
+        x_out = qp0 + config.τ* J_sym(QP(wi@ vgradH(X))) # Is the right implementation to do vgrad(X).x or vgrad(X)? 
         return x_out
     return AVF
 def gen_FPI(func, config):
@@ -357,6 +358,39 @@ def gen_AVF_FPI_T(gradH_flat, config):
         else:
             return final_state
     return AVF_FPI_T
+
+def gen_AVF_AA_T(gradH_flat, config):
+    """
+    debug returns all scan outputs: 
+        final_state, (traj, iters, resids)
+    """
+    AVF = gen_AVF(gradH_flat, config)
+    # jaxopt AndersonAcceleration does FPI in the first entry
+    AVF_rev = lambda y,x0: AVF(x0, y)
+    
+    AVF_AA = AndersonAcceleration(AVF_rev,beta=config.AA_beta,history_size=config.AA_m, tol=config.tol,implicit_diff=True,maxiter=config.max_iter)
+    def AVF_AA_t(carry, _):
+        """
+        Body Function for scan
+        AA for one dt, timestep. 
+        """
+        init_guess = AVF(carry, carry) 
+        out = AVF_AA.run(init_guess, carry)
+        return out.params, (out.params, out.state.iter_num)
+
+    def AVF_AA_T(θω_init):
+         
+        final_state, (traj, iters)  = jax.lax.scan(AVF_AA_t, 
+                                                           θω_init, 
+                                                           None, 
+                                                           config.N
+                                                           )
+        if config.debug:
+            return final_state, traj, iters
+        else:
+            return final_state
+    return AVF_AA_T
+
 
 
 def gen_AVF_vecs(config):

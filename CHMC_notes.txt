@@ -7,6 +7,16 @@ CHMC: HMC-Online
 |- metrics.py contains analytics of chains
 |- tests/ contains tests for old/new QP object, Integrators, Sampler
 |- plotting.py contains plotting functionality for metrics
+July 9, 2026
+Using jaxopt AndersonAcceleration for generalized-chi-squared. 
+Goal is to show difference in convergence in iterations/compute time for LF, FPI, AA, Newton. 
+
+- Implement p-chi
+- Implement p-chi derivatives/hamiltonian?
+- 
+July 10, 2026
+Implemented AA using jaxopt
+
 July 7, 2026
 Import the implementation of diagonal only scalar QP. 
 

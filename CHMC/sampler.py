@@ -15,7 +15,7 @@ import jax.random as jr
 from typing import Callable, Tuple
 
 from datatypes import QP, SamplerState, SamplerOutput, IntegratorConfig
-from integrator import gen_leapfrog, gen_midptNewtonFPI, gen_AVF_FPI_T, gen_AVF_NewtonFPI_T
+from integrator import gen_leapfrog, gen_midptNewtonFPI, gen_AVF_FPI_T, gen_AVF_NewtonFPI_T, gen_AVF_AA_T
 
 def gen_draw_momentum(c:float = 0.2, constant_p:bool =False):
     def draw_momentum_constant_p(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
@@ -165,9 +165,14 @@ def gen_chmc_kernel(
     draw_momentum = gen_draw_momentum(constant_p=config.constant_p)
     def gradH_flat(vec): return gradH(QP(vec)).x
     if config.integrator == 'AVF_FPI_T':
+        # jax.debug.print('integrator = gen_AVF_FPI_T')
         integrator = gen_AVF_FPI_T(gradH_flat, config)
     if config.integrator == 'AVF_NewtonFPI_T':
+        # jax.debug.print('integrator = gen_AVF_NewtonFPI_T')
         integrator = gen_AVF_NewtonFPI_T(gradH_flat, config)
+    if config.integrator == 'AA':
+        # jax.debug.print('integrator = gen_AVF_AA_T')
+        integrator = gen_AVF_AA_T(gradH_flat, config)    
     else:
         integrator = gen_midptNewtonFPI(gradH, config, solve)
     def chmc_kernel(carry_in, key):
@@ -199,6 +204,13 @@ def gen_chmc_kernel(
         return carry_out, carry_out
     
     return chmc_kernel
+
+def sampler(initial_sample:list, 
+            keys, 
+            kernel
+            ):
+    _, samples = jax.lax.scan(kernel, initial_sample, xs=keys)
+    return samples
 
 def hmc_sampler(
     initial_sample: list,

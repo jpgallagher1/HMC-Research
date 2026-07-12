@@ -86,6 +86,8 @@ class IntegratorConfig (NamedTuple):
     max_iter: int = 3 # Max Newton iter
     constant_p: bool = False # used in sampler
     integrator: str = 'midptNewtonFPI'
+    AA_m: int = 5
+    AA_beta: float=1
     n_pts: int = 4 # THIS IS NEW ####
     trajectory: bool = False # THIS IS NEW ####
     gen_gauss: bool = False
