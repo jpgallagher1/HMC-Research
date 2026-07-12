@@ -60,7 +60,6 @@ def maxtracediff(X,Y) -> float:
 def maxdiff(X,Y) -> float:
     return jnp.max(jnp.abs(X-Y))
 
-
 def random_1d_projection(key, target_dim: int) -> tuple:
     x = jr.uniform(key, target_dim)
     x_normed = x/jnp.linalg.norm(x)
