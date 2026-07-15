@@ -291,9 +291,9 @@ def gauss4(a: float,
     Xout = β1*jnp.array([x0, x1, x2, x3])+β0
     Wout = β1*jnp.array([w0, w1, w2, w3])
     return Xout, Wout
-def gen_AVF(gradH_flat, config):
+def gen_AVF(gradH, config):
     """
-    ****USES gradH_flat*****
+    ****USES gradH*****
     """
     roots, weights = roots_legendre(config.n_pts)
     a, b = 0, 1
@@ -310,12 +310,11 @@ def gen_AVF(gradH_flat, config):
 
         This is numerical implementation but i'll likely need to do some more solving for gradH_flat
         """
-        X0 = jnp.expand_dims(qp0.x, -1)
-        X1 = jnp.expand_dims(qp1.x, -1)
-        X = X0+ ti*(X1-X0)
-        vgradH = vmap(gradH_flat, in_axes=-1) #Array in, QP out...maybe not bet implementation
-
-        x_out = qp0 + config.τ* J_sym(QP(wi@ vgradH(X))) # Is the right implementation to do vgrad(X).x or vgrad(X)? 
+        X0 = jnp.expand_dims(qp0.x, 0) # (1, 2*dim)
+        X1 = jnp.expand_dims(qp1.x, 0) # (1, 2*dim)
+        X = X0+ ti[:,None]@(X1-X0) # (nodes, 2*dim) + (nodes, 1)(1, 2*dim)
+        gradX = vmap(gradH)(QP(X)) #QP in, QP out (nodes, 2*dim)
+        x_out = qp0 + config.τ* J_sym(QP(wi@ gradX.x)) # Is the right implementation to do vgrad(X).x or vgrad(X)? 
         return x_out
     return AVF
 def gen_FPI(func, config):

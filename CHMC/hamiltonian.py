@@ -69,7 +69,7 @@ def J_sym_flat(vec) -> jnp.array:
     return outvec
 
 # Hamiltonian constructors
-def p_gauss_hamiltonian(
+def gen_p_gauss_hamiltonian(
         β,
         mass_inv: MassMatrix
 )-> Callable[[QP], float]:

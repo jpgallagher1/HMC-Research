@@ -9,3 +9,4 @@ plots/*
 *.stdout
 mcmc_results/*
 *.out
+docs/superpowers/

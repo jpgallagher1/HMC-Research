@@ -1,4 +1,14 @@
 List of Possible Sources of Errors by file:
+gen_p_gauss_hamiltonian, updated name in hamiltonian.py 
+./CHMC/Sandbox/AVF/chmc_avf_pgauss.ipynb:57:    "from hamiltonian import gaussian_hamiltonian, standard_hamiltonian, p_gauss_hamiltonian\n",
+./CHMC/Sandbox/AVF/chmc_avf_pgauss.ipynb:119:    "H = p_gauss_hamiltonian(4, None)\n",
+./CHMC/Sandbox/AVF/CHMC-AA.ipynb:13:    "from hamiltonian import p_gauss_hamiltonian\n",
+./CHMC/Sandbox/AVF/CHMC-AA.ipynb:32:    "H = p_gauss_hamiltonian(4, None)\n",
+./CHMC/Sandbox/qp_update/qp_update.ipynb:997:    "def p_gauss_hamiltonian(\n",
+./CHMC/Sandbox/qp_update/qp_update.ipynb:1015:    "pham = p_gauss_hamiltonian(4, None )\n",
+./CHMC/scripts/gen_gauss/chmc_hi_dim_gen_gauss1280:40960.py:23:from hamiltonian import gaussian_hamiltonian, standard_hamiltonian, p_gauss_hamiltonian
+./CHMC/scripts/gen_gauss/chmc_hi_dim_gen_gauss1280:40960.py:88:H = p_gauss_hamiltonian(4, None)
+./CHMC/hamiltonian.py:72:def gen_p_gauss_hamiltonian(
 
 datatypes.py
     uses typing, no jaxtyping, 

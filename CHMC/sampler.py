@@ -144,6 +144,7 @@ def gen_hmc_kernel(
 def gen_chmc_kernel(
     H: Callable[[QP], float],
     config: IntegratorConfig,
+    gradH: Callable[[QP], QP]|None=None,
     solve: Callable = jnp.linalg.solve
 ) -> Callable:
     """
@@ -161,18 +162,21 @@ def gen_chmc_kernel(
         CHMC kernel function
     """
     assert not config.debug , "config.debug not implemented for samplers"
-    gradH = jax.grad(H)
+    if gradH is not None:
+        gradH = gradH
+    else:
+        gradH = jax.grad(H)
     draw_momentum = gen_draw_momentum(constant_p=config.constant_p)
-    def gradH_flat(vec): return gradH(QP(vec)).x
+    # def gradH_flat(vec): return gradH(QP(vec)).x # DEPRECATED
     if config.integrator == 'AVF_FPI_T':
         # jax.debug.print('integrator = gen_AVF_FPI_T')
-        integrator = gen_AVF_FPI_T(gradH_flat, config)
-    if config.integrator == 'AVF_NewtonFPI_T':
+        integrator = gen_AVF_FPI_T(gradH, config)
+    elif config.integrator == 'AVF_NewtonFPI_T':
         # jax.debug.print('integrator = gen_AVF_NewtonFPI_T')
-        integrator = gen_AVF_NewtonFPI_T(gradH_flat, config)
-    if config.integrator == 'AA':
+        integrator = gen_AVF_NewtonFPI_T(gradH, config)
+    elif config.integrator == 'AA':
         # jax.debug.print('integrator = gen_AVF_AA_T')
-        integrator = gen_AVF_AA_T(gradH_flat, config)    
+        integrator = gen_AVF_AA_T(gradH, config)    
     else:
         integrator = gen_midptNewtonFPI(gradH, config, solve)
     def chmc_kernel(carry_in, key):

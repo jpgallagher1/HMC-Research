@@ -83,3 +83,9 @@ def gen_p_gauss_pdf(β=4):
     return p_gauss_pdf
 
 
+def gen_p_chi_pdf(d=200, p=6):
+    def pdf(x):
+        coeff = (p**(1-d/p))/gamma(d/p)
+        log_density = (d-1)*jnp.log(jnp.abs(x))-(1/p)*jnp.abs(x)**p
+        return coeff*jnp.exp(log_density)
+    return pdf
