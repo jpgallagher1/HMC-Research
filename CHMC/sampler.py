@@ -144,8 +144,8 @@ def gen_hmc_kernel(
 def gen_chmc_kernel(
     H: Callable[[QP], float],
     config: IntegratorConfig,
-    gradH: Callable[[QP], QP]|None=None,
-    solve: Callable = jnp.linalg.solve
+    solve: Callable = jnp.linalg.solve, 
+    gradH: Callable[[QP], QP]|None=None
 ) -> Callable:
     """
     Generate CHMC kernel using implicit midpoint FPI.

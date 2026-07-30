@@ -166,6 +166,7 @@ def midptNewtonFPI_step(
         solve: Callable = jnp.linalg.solve
 ) -> tuple[QP, IntegratorState]:
     """
+    returns [QP, IntegratorState]
     Single implicit midpoint step via FPI (Newton's method)
 
     Solves Solves: qp_{n+1} = qp_n + τ J ∇H(0.5(qp_n + qp_{n+1}))

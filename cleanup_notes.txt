@@ -1,0 +1,12 @@
+July 20, 2026
+
+Just finished helping andy with some plots for pchi
+
+Some ideas on what to do:
+- initial point's effect on likelihood of acceptance
+     - more than just burn in time, vanshing gradients
+- refactor notebooks into scripts I can run on pinnacles
+- actually running the full scripts to generate the heatmap we talked about
+- Use jax autodiff to compute the derivative wrt different scaling parameters... such as d, for different numerical methods. 
+- write up manuscript
+- build out for gen-gauss, try for AA stats

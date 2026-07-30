@@ -9,6 +9,7 @@ Last Modified: 2026-02-16
 Version: 0.1
 """
 import jax
+from pathlib import Path
 import jax.numpy as jnp
 import jax.random as jr
 from scipy.stats import wasserstein_distance, wasserstein_distance_nd
@@ -135,3 +136,31 @@ def gen_cdf1D_marginal(key, target, dim = 2, m_points=101):
     return
 def max_τ(target_mat):
     return 2/jnp.sqrt(jnp.max(jnp.linalg.eigvals(target_mat)))
+
+def load_result(base, method, tau, T, length, run):
+    """
+    navigating the file path generated from the forloops. 
+    result = load_result(
+        base,
+        method = "AA",
+        tau = 2**-1,
+        T = 1.0,
+        length = 1000,
+        run = 3,
+    )
+
+    q = result["q"]
+    deltaHs = result["deltaHs"]
+    accepted = result["accepted"]
+    runtime = result["runtime"]
+
+    """
+    path = (
+        Path(base)
+        / method
+        / f"tau_{float(tau):.12g}"
+        / f"T_{float(T):.12g}"
+        / f"len_{int(length)}"
+        / f"run_{run}.npz"
+    )
+    return jnp.load(path)
