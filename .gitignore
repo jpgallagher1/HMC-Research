@@ -10,3 +10,4 @@ plots/*
 mcmc_results/*
 *.out
 docs/superpowers/
+.vscode/*

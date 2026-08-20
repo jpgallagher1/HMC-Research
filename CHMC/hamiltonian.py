@@ -125,6 +125,17 @@ def gaussian_hamiltonian(
         return U+K
     return hamiltonian
 
+def gen_ham_gmm_pdf():
+    p1 = lambda x: jax.scipy.stats.norm.pdf(x, 0.25, 0.5)
+    p2 = lambda x: jax.scipy.stats.norm.pdf(x, -0.5, 0.25)
+    p = lambda x: 0.25*p1(x) + 0.75*p2(x)
+
+    def U(q):
+        return jnp.log(p(q))
+    def H(qp:QP):
+        return jnp.sum(qp.q**2/2 + U(qp.q))
+    return H
+
 def hamiltonian_from_flat(H_flat: Callable[[jnp.ndarray], float]) -> Callable[[QP], float]:
     """
     DEPRICATED**

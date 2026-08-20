@@ -93,6 +93,15 @@ class IntegratorConfig (NamedTuple):
     gen_gauss: bool = False
     debug: bool = False
 
+def gen_configs(taus, Ts, **kw):
+    """
+    One IntegratorConfig per (T, τ) pair, N = round(T/τ) so T = N*τ holds exactly.
+    Returns nested list configs[i][j] ~ (Ts[i], taus[j]), shape (len(Ts), len(taus)).
+    Extra kwargs (tol, max_iter, n_pts, ...) pass through to every config.
+    """
+    return [[IntegratorConfig(τ=float(τ), T=int(round(T/τ))*float(τ), N=int(round(T/τ)), **kw)
+             for τ in taus] for T in Ts]
+
 # Type aliases for clarity
 TargetDensity = Callable[[jnp.ndarray], float]
 MassMatrix = jnp.ndarray
