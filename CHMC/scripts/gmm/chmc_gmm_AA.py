@@ -49,7 +49,7 @@ n_runs = 10
 
 ### time integration parameters
 # taus = 2**-jnp.linspace(1, 4, 4)
-taus = jnp.linspace(0.11, 0.8, 7) # extended sweep of sub region
+taus = jnp.linspace(0.11, 0.08, 7) # extended sweep of sub region
 Ts = jnp.linspace(1, 5, 5)
 lens = jnp.logspace(2, 4, 9, base=10, dtype=int)
 
