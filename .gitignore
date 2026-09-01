@@ -11,3 +11,4 @@ mcmc_results/*
 *.out
 docs/superpowers/
 .vscode/*
+file_tree_*.txt
