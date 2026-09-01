@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gmm_LF
+#SBATCH --job-name=gmm_LF_subregion
 #SBATCH --partition=short
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

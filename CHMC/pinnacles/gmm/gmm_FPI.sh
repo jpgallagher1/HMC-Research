@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gmm_FPI
+#SBATCH --job-name=gmm_FPI_subregion
 #SBATCH --partition=short
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
