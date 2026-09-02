@@ -126,14 +126,18 @@ def gaussian_hamiltonian(
     return hamiltonian
 
 def gen_ham_gmm_pdf():
-    p1 = lambda x: jax.scipy.stats.norm.pdf(x, 0.25, 0.5)
-    p2 = lambda x: jax.scipy.stats.norm.pdf(x, -0.5, 0.25)
-    p = lambda x: 0.25*p1(x) + 0.75*p2(x)
+    log_w = jnp.log(jnp.array([0.25, 0.75]))
+    locs   = jnp.array([0.25, -0.5])
+    scales = jnp.array([0.2,   0.15])
+
+    def logp(x):
+        components = jax.scipy.stats.norm.logpdf(x[..., None], locs, scales)
+        return jax.scipy.special.logsumexp(log_w + components, axis=-1)
 
     def U(q):
-        return jnp.log(p(q))
+        return -logp(q)
     def H(qp:QP):
-        return jnp.sum(qp.q**2/2 + U(qp.q))
+        return jnp.sum(qp.p**2/2 + U(qp.q))
     return H
 
 def hamiltonian_from_flat(H_flat: Callable[[jnp.ndarray], float]) -> Callable[[QP], float]:
