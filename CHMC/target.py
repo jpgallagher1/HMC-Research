@@ -89,3 +89,32 @@ def gen_p_chi_pdf(d=200, p=6):
         log_density = (d-1)*jnp.log(jnp.abs(x))-(1/p)*jnp.abs(x)**p
         return coeff*jnp.exp(log_density)
     return pdf
+
+def neals_funnel_logpdf(q):
+    """
+    q[0]  = yy
+    q[1:] = x_1, ..., x_9
+
+    yy ~ Normal(0, 3)
+    x_i | y ~ Normal(0, exp(yy))
+    """
+    yy = q[0]
+    xs = q[1:]
+
+    # log p(yy)
+    log_p_yy = (
+        -0.5 * (yy / 3.0)**2
+        # UNNORMALIZED****
+        # - jnp.log(3.0)  
+        # - 0.5 * jnp.log(2.0 * jnp.pi) 
+    )
+
+    # Variance of each x_i is exp(v)
+    log_p_xs_given_yy = jnp.sum(
+        -0.5 * xs**2 * jnp.exp(-yy)
+        - 0.5 * yy
+        # UNNORMALIZED
+        # - 0.5 * jnp.log(2.0 * jnp.pi)
+    )
+
+    return log_p_yy + log_p_xs_given_yy
