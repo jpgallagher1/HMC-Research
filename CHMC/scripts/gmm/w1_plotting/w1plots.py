@@ -1,6 +1,6 @@
 # John Gallagher
-# Aug 10, 2026
-# Goal run W1 metric for p-chi to computer 
+# Aug 31, 2026
+# Goal run W1 metric for gmm on pinnacles
 import sys
 from pathlib import Path
 sys.path.insert(0, "/data/johngallagher/HMC-Research/CHMC")
@@ -33,11 +33,12 @@ d = 100
 n_runs = 10
 runs = jnp.arange(0, n_runs)
 
-methods = ['LF','FPI','Newton','AA_m=4','AA_m=3', 'AA_m=2']
+methods = ['LF','FPI', 'Newton','AA_m=4','AA_m=3', 'AA_m=2']
 nmtds = len(methods)
 # taus = jnp.array([0.1, 0.09])
 # taus = 2**-jnp.linspace(1, 4, 4)
-taus = [0.5, 0.25, 0.125, 0.0625]
+# taus = [0.5, 0.25, 0.125, 0.0625]
+taus = jnp.linspace(0.11, 0.08, 7)
 ntaus = len(taus)
 
 Ts = jnp.linspace(1, 5, 5)
@@ -116,54 +117,49 @@ hmc_runtimes = {meth: np.zeros(shape=(ntaus, nTs, nlens, n_runs)) for meth in me
 for meth in methods:
     for j in range(len(taus)):
         for k in range(len(Ts)):
-            for l in range(len(lens)):
-                for i in range(n_runs):
-                    if meth != 'LF' and meth != 'FPI':
+            for i in range(n_runs):
+                if meth != 'LF' and meth != 'FPI':
+                    for l in range(len(lens)):
                         result = load_result(base, meth, taus[j], Ts[k], lens[l], run=i)
                         hmc_chain_np = np.squeeze(result['q'])
                         hmc_runtimes[meth][j,k,l,i] = result['runtime']
                         try:
                                         # ntaus, nTs, nlens, n_runs
                             hmc_w1_metrics[meth][j, k, l, i] = ot.wasserstein_1d(
-                                hmc_chain_np, xt, seed=seednum
+                                hmc_chain_np, xt
                             )
                             # seednum +=1
                         except Exception:
                             hmc_w1_metrics[meth][j,k,l, i] = 1
                                     # number doesn't matter, just need it not to fail and it will be replaced later. 
-                    if meth =='FPI':
+                if meth =='FPI':
+                    for l in range(len(lens_FPI)):
                         # UGH I AM REPEATING MYSELF
-                        for l in range(len(lens_FPI)):
-                            result = load_result(base, meth, taus[j], Ts[k], lens_FPI[l], run=i)
-                            hmc_chain_np = np.squeeze(result['q'])
-                            hmc_runtimes[meth][j,k,l,i] = result['runtime']
-                            try:
-                                            # ntaus, nTs, nlens, n_runs
-                                hmc_w1_metrics[meth][j, k, l, i] = ot.wasserstein_1d(
-                                    hmc_chain_np, xt
-                                )
-                                seednum +=1
-                            except Exception:
-                                hmc_w1_metrics[meth][j,k,l, i] = jnp.nan    
-                    else: 
+                        result = load_result(base, meth, taus[j], Ts[k], lens_FPI[l], run=i)
+                        hmc_chain_np = np.squeeze(result['q'])
+                        hmc_runtimes[meth][j,k,l,i] = result['runtime']
+                        try:
+                                        # ntaus, nTs, nlens, n_runs
+                            hmc_w1_metrics[meth][j, k, l, i] = ot.wasserstein_1d(
+                                hmc_chain_np, xt
+                            )
+                            seednum +=1
+                        except Exception:
+                                hmc_w1_metrics[meth][j,k,l, i] = 1    
+                elif meth == 'LF': 
+                    for l in range(len(lens_LF)):
                         # UGH I AM REPEATING MYSELF AGAIN
-                        for l in range(len(lens_LF)):
-    
-                            result = load_result(base, meth, taus[j], Ts[k], lens_LF[l], run=i)
-                            hmc_chain_np = np.squeeze(result['q'])
-                            hmc_runtimes[meth][j,k,l,i] = result['runtime']
-                            try:
-                                            # ntaus, nTs, nlens, n_runs
-                                hmc_w1_metrics[meth][j, k, l, i] = ot.wasserstein_1d(
-                                    hmc_chain_np, xt
-                                )
-                                seednum +=1
-                            except Exception:
-                                hmc_w1_metrics[meth][j,k,l, i] = jnp.nan    
-
-### RUNNING ON AA m=3
-## July 20, 2026
-## 
+                        result = load_result(base, meth, taus[j], Ts[k], lens_LF[l], run=i)
+                        hmc_chain_np = np.squeeze(result['q'])
+                        hmc_runtimes[meth][j,k,l,i] = result['runtime']
+                        try:
+                                        # ntaus, nTs, nlens, n_runs
+                            hmc_w1_metrics[meth][j, k, l, i] = ot.wasserstein_1d(
+                                hmc_chain_np, xt
+                            )
+                            seednum +=1
+                        except Exception:
+                            hmc_w1_metrics[meth][j,k,l, i] = 1
 
 
 methods = ['AA_m=2', 'LF','FPI','Newton']
@@ -200,10 +196,11 @@ for j in range(len(taus)):
         subtitle1 = f"\n $\\tau = $ {taus[j]}, $T = $ {Ts[k]}"
         subtitle2 = f"\n AA_window: 2, tol=1e-3, max_iter = 10, AVF_npts = 6"
         plt.title(title+subtitle1+subtitle2)
-        plt.rcParams['text.usetex'] = True
+        
 
-        # 2. Enforce Computer Modern for both standard text and math
-        plt.rcParams['font.family'] = 'serif'
+        # For 
+        # plt.rcParams['text.usetex'] = False
+        # plt.rcParams['font.family'] = 'serif'
         # plt.rcParams['font.serif'] = ['Computer Modern Roman']
         # plt.title(title + subtitle1+subtitle2)
         # plt.title(title+subtitle1)
@@ -224,3 +221,4 @@ for j in range(len(taus)):
 
         file=f'gmm_tau{taus[j]}_T{Ts[k]}_{methods[0]}_Prec_W1_time_loglog_DRAFT.png'
         plt.savefig(plotpath/file, dpi = 200)
+        plt.close()

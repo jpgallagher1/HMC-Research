@@ -88,6 +88,26 @@ def gen_p_gauss_hamiltonian(
         return U+K
     return hamiltonian
 
+def logpdf_hamiltonian(
+    logpdf,
+    mass_inv: MassMatrix
+)-> Callable[[QP], float]:
+    """
+    Hamiltonian(q,p) = U(q) + K(p)
+    For standard HMC: 
+        U(q) = -log π(q)
+        K(p) = 0.5 *  p.T@ M^{-1}@ p
+    """
+
+    def hamiltonian(qp:QP) -> float:
+        U = -logpdf(qp.q)
+        if mass_inv is not None:
+            K = 0.5*jnp.dot(qp.p, mass_inv@qp.p)
+        else:
+            K = 0.5*jnp.sum(qp.p**2)
+        return jnp.sum(U+K)
+    return hamiltonian
+
 def standard_hamiltonian(
     target: TargetDensity,
     mass_inv: MassMatrix
