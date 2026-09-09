@@ -5,6 +5,12 @@
 
 
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('T', type=float, choices=[1, 2, 3, 4, 5],
+                    help='final integration time')
+args = parser.parse_args()
+
 import sys
 from pathlib import Path
 sys.path.insert(0, "/data/johngallagher/HMC-Research/CHMC")
@@ -12,7 +18,7 @@ sys.path.insert(0, "/data/johngallagher/HMC-Research/CHMC")
 SCRATCH = Path("/scratch/johngallagher")
 
 base = SCRATCH/Path(f"neals_results")
-base.mkdir(exist_ok=True)
+base.mkdir(parents=True, exist_ok=True)
 
 
 import time
@@ -35,11 +41,7 @@ from hamiltonian import logpdf_hamiltonian
 from sampler import gen_hmc_kernel, gen_hmc_kernel, hmc_sampler, hmc_sampler
 from databasing import write_tree
 
-# import argparse
-# parser = argparse.ArgumentParser()
 
-# parser.add_argument('m', type = int)
-# args = parser.parse_args()
 
 
 records = []
@@ -52,7 +54,7 @@ d=10
 ### time integration parameters
 taus = 2**-jnp.linspace(1, 5, 5) # base sweep
 # taus = jnp.linspace(0.11, 0.08, 7) # extended sweep of sub region
-Ts = jnp.linspace(1, 5, 5)
+T = args.T
 lens = jnp.logspace(2, 5, 9, base=10, dtype=int) # for extending to same time horizon
 
 
@@ -60,74 +62,78 @@ lens = jnp.logspace(2, 5, 9, base=10, dtype=int) # for extending to same time ho
 tol = 1e-3
 max_iter = 10
 methods = [f'LF']
-method_base = SCRATCH/base/methods[0]
+method_base = base/methods[0]
 
 
 
 H = logpdf_hamiltonian(neals_funnel_logpdf, None)
 gradH = grad(H)
 
-# (numtaus, numTs)
+# One configuration per tau for the supplied T.
 # integrator kwarg unused because hmc-LF
-configs = gen_configs(taus, Ts, tol=tol, max_iter=max_iter, n_pts=6,
-                      integrator='AVF_FPI_T', gen_gauss=False, AA_beta=1)  
+configs = gen_configs(taus, [T], tol=tol, max_iter=max_iter, n_pts=6,
+                      integrator='AVF_FPI_T', gen_gauss=False, AA_beta=1)[0]
                       
-# (numtaus, numTs) 
 
-for row in configs:
-    print(' | '.join(f'τ={c.τ:g}, T={c.T:g}, N={c.N}' for c in row))
+print(' | '.join(f'τ={c.τ:g}, T={c.T:g}, N={c.N}' for c in configs))
 
 
 
 for l in range(len(lens)):
     for j in range(len(taus)):
-        for k in range(len(Ts)):
-            hmc = gen_hmc_kernel(H, configs[k][j])    
-            scan_hmc = jax.jit(lambda init, xs: jax.lax.scan(hmc, init, xs))
-            for i in range(n_runs):
-                key = jr.PRNGKey(i)
-                keya, keyb = jr.split(key)
-                chain_keys = jr.split(keya, lens[l])
+        hmc = gen_hmc_kernel(H, configs[j])
+        scan_hmc = jax.jit(lambda init, xs: jax.lax.scan(hmc, init, xs))
+        for i in range(n_runs):
+            key = jr.PRNGKey(i)
+            keya, keyb = jr.split(key)
+            chain_keys = jr.split(keya, lens[l])
 
-                qp0 = QP(jr.normal(keyb, shape=(2*d,)))
-                init = [qp0, 1, False]
+            qp0 = QP(jr.normal(keyb, shape=(2*d,)))
+            init = [qp0, 1, False]
 
-                # Warm up / compile
+            # Finish input preparation before compiling or timing.
+            jax.block_until_ready((init, chain_keys))
+
+            # Compile once per (length, tau, T). No execution warm-up.
+            if i == 0:
+                print(f"Compiling T={T}, tau={taus[j]}, length={lens[l]}", flush=True)
                 compiled_scan = scan_hmc.lower(init, chain_keys).compile()
 
-                # Timed run
-                start = time.perf_counter()
-                _, (qps, deltaHs, accepted) = scan_hmc(init, chain_keys)
-                jax.block_until_ready(qps)
-                elapsed = time.perf_counter() - start
+            # Time this chain only; wait for the entire result.
+            print(f"Starting T={T}, tau={taus[j]}, length={lens[l]}, run={i}", flush=True)
+            start = time.perf_counter()
+            result = compiled_scan(init, chain_keys)
+            jax.block_until_ready(result)
+            elapsed = time.perf_counter() - start
+            _, (qps, deltaHs, accepted) = result
 
-                folder = (
-                    base
-                    / methods[0]
-                    / f"tau_{taus[j]}"
-                    / f"T_{Ts[k]}"
-                    / f"len_{lens[l]}"
-                )
-                filename = folder / f"run_{i}.npz"
-                folder.mkdir(parents=True, exist_ok=True)
-                path = folder / f"run_{i}.npz"
-                jnp.savez(
-                    path,
-                    q=jnp.asarray(qps.q),
-                    deltaHs=jnp.asarray(deltaHs),
-                    accepted=jnp.asarray(accepted),
-                    runtime = jnp.float64(elapsed),
-                )
-                records.append({
-                    "method": methods[0],
-                    "tau": float(taus[j]),
-                    "T": float(Ts[k]),
-                    "length": int(lens[l]),
-                    "run": int(i),
-                    "path": str(path.relative_to(base)),
-                })
+            folder = (
+                base
+                / methods[0]
+                / f"tau_{taus[j]}"
+                / f"T_{T}"
+                / f"len_{lens[l]}"
+            )
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"run_{i}.npz"
+            jnp.savez(
+                path,
+                q=jnp.asarray(qps.q),
+                deltaHs=jnp.asarray(deltaHs),
+                accepted=jnp.asarray(accepted),
+                runtime = jnp.float64(elapsed),
+            )
+            print(f"Saved {path}: runtime={elapsed:.6f}s", flush=True)
+            records.append({
+                "method": methods[0],
+                "tau": float(taus[j]),
+                "T": float(T),
+                "length": int(lens[l]),
+                "run": int(i),
+                "path": str(path.relative_to(base)),
+            })
 
-with open(method_base / f"metadata_{methods[0]}.json", "w") as f:
+with open(method_base / f"metadata_{methods[0]}_T_{T}.json", "w") as f:
     json.dump({"files": records}, f, indent=2)
 
-write_tree(method_base, f'file_tree_{methods[0]}.txt')
+write_tree(method_base, method_base / f'file_tree_{methods[0]}_T_{T}.txt')
