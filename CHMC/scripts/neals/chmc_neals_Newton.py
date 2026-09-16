@@ -2,7 +2,10 @@
 # Sept 14, 2026
 # Script to test Neals Funnel
 # 
-# I need to stop repeating myself, like in the preamble of scratch/Path. 
+# I had to update this script to be able to take the inputs from a job list 
+# 1. make job list using make_tasks.sh
+# 2. run neals_newton.sh
+#      pay attention to numcores, num workers, and num jobs
 
 
 
