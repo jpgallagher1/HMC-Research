@@ -31,3 +31,31 @@ def write_tree(root: Path, outfile="file_tree.txt"):
             f.write(line + "\n")
 
     print(f"Saved tree to {outfile}")
+
+def load_result(base, method, tau, T, length, run):
+    """
+    navigating the file path generated from the forloops. 
+    result = load_result(
+        base,
+        method = "AA",
+        tau = 2**-1,
+        T = 1.0,
+        length = 1000,
+        run = 3,
+    )
+
+    q = result["q"]
+    deltaHs = result["deltaHs"]
+    accepted = result["accepted"]
+    runtime = result["runtime"]
+
+    """
+    path = (
+        Path(base)
+        / method
+        / f"tau_{float(tau):.12g}"
+        / f"T_{float(T):.1f}"
+        / f"len_{int(length)}"
+        / f"run_{run}.npz"
+    )
+    return jnp.load(path)

@@ -39,9 +39,9 @@ for meth in methods:
         hmc_w1_metrics[meth] = z['w1']
         hmc_runtimes[meth] = z['runtime']
 
-plot_methods = ['AA_m=2', 'LF','FPI','Newton']    
+plot_methods = ['AA_m=4', 'LF','FPI','Newton']    
 markers = {
-    "AA_m=2": "-*",
+    "AA_m=4": "-*",
     "LF": "-o",
     "FPI": "-v",
     "Newton": "-^",
@@ -62,7 +62,7 @@ for j in range(len(taus)):
 
         title=f"W1 Err versus MCMC time Neals"      
         subtitle1 = f"\n $\\tau = $ {taus[j]}, $T = $ {Ts[k]}"
-        subtitle2 = f"\n AA_window: 2, tol=1e-3, max_iter = 10, AVF_npts = 6"
+        subtitle2 = f"\n AA_window: 4, tol=1e-3, max_iter = 10, AVF_npts = 6"
         plt.title(title+subtitle1+subtitle2)
 
         plt.xlabel(r"Time (s)")
