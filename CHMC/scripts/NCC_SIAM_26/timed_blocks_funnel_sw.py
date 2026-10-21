@@ -27,15 +27,19 @@ n_ref = 10_000              # exact funnel samples used as the reference measure
 n_projections = 1000        # random directions; the same ones are used for every chain
 sw_p = 1                    # sliced W_p: 1 gives sliced W_1 (mean over directions of 1D W_1)
 ref_seed = 0
+max_len = 100_000           # longest chain prefix evaluated; POT's peak memory is about 3 GB at 100k samples, 1000 projections
 
 base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_blocks')
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=base)
 parser.add_argument('--workers', type=int, default=None)    # default: SLURM_CPUS_PER_TASK, else all cores
 parser.add_argument('--n_projections', type=int, default=n_projections)
+parser.add_argument('--max_len', type=int, default=max_len)
+parser.add_argument('--dry_run', action='store_true')       # print chain lengths and the estimated cost, compute nothing
 args = parser.parse_args()
 base = args.output
 n_projections = args.n_projections
+max_len = args.max_len
 n_workers = args.workers or int(os.environ.get('SLURM_CPUS_PER_TASK', os.cpu_count()))
 sw_base = base / 'sw_data'
 
@@ -55,11 +59,12 @@ n_runs = max(int(folder.name.split('_')[1]) for folder in folders) + 1
 nblocks = max(len(list(folder.glob('block_*.npz'))) for folder in folders)
 if nblocks == 0:
     raise ValueError('No saved blocks found.')
-# Chain lengths to evaluate: 200, 400, 600, 800, 1000, 2000, ..., 10_000 (up to what was saved).
-# Extended chains (matched to Newt's wall time) are also evaluated every 5000 past 10_000.
-lens = np.array([n for n in [*range(200, 1000, 200), *range(1000, 10_001, 1000),
-                             *range(15_000, nblocks * block_size + 1, 5000)]
-                 if n <= nblocks * block_size])
+# Chain lengths to evaluate: 200, 400, 600, 800, 1000, 2000, ..., 10_000, then log-spaced
+# (15k, 20k, 30k, 50k, ...) up to max_len or what was saved. Extended chains can be much longer
+# than max_len; only the first max_len samples are evaluated.
+lens = np.array(sorted({n for n in [*range(200, 1000, 200), *range(1000, 10_001, 1000),
+                                    *[m * 10**e for e in range(3, 9) for m in (10, 15, 20, 30, 50, 70)]]
+                        if n <= min(nblocks * block_size, max_len)}))
 
 # Exact funnel samples: y ~ N(0, 3^2), x_i | y ~ N(0, exp(y)) for the other dim - 1 coordinates.
 rng = np.random.default_rng(ref_seed)
@@ -117,7 +122,7 @@ def compute_chain(task):
         chain = full_chain[:length]
         if np.isfinite(chain).all():
             sw[l] = ot.sliced_wasserstein_distance(
-                chain, xt, n_projections=n_projections, p=sw_p, seed=ref_seed)
+                chain, xt, a=None, b=None, n_projections=n_projections, p=sw_p, seed=ref_seed)
         done += 1
         temporary = out.with_name(out.name + f'.tmp{os.getpid()}')
         with temporary.open('wb') as f:
@@ -127,7 +132,38 @@ def compute_chain(task):
     return task, done, time.perf_counter() - start
 
 
+def dry_run():
+    """Chain lengths per method and a rough cost estimate. Reads file names only."""
+    seconds_per_1000 = 0.4 * n_projections / 1000        # measured: ~0.4 s per 1000 samples at 1000 directions
+    total = 0.0
+    print(f'{n_projections} directions; evaluating {len(lens)} lengths up to {max_len:,}: '
+          f'{lens[:3].tolist()} ... {lens[-3:].tolist()}')
+    longest = 0
+    for meth in methods:
+        n_samples = []
+        for j in range(len(taus)):
+            for k in range(len(Ts)):
+                for i in range(n_runs):
+                    n = block_size * len(list(chain_folder(meth, j, k, i).glob('block_*.npz')))
+                    if n:
+                        n_samples.append(n)
+        n_samples = np.array(n_samples)
+        cost = sum(float(np.sum(lens[lens <= n])) for n in n_samples) / 1000 * seconds_per_1000
+        total += cost
+        longest = max(longest, min(n_samples.max(), max_len))
+        print(f'  {meth:5s} {len(n_samples):4d} chains, samples min/median/max = '
+              f'{n_samples.min():,} / {int(np.median(n_samples)):,} / {n_samples.max():,}; '
+              f'~{cost / 3600:.1f} core-hours')
+    print(f'Estimated total: {total / 3600:.1f} core-hours, so about {total / 3600 / n_workers:.1f} h on '
+          f'{n_workers} workers (rough; assumes perfect load balance).')
+    print(f'Peak memory per worker: about {longest * n_projections * 30 / 1e9:.1f} GB '
+          f'(longest prefix evaluated: {longest:,} samples).')
+
+
 if __name__ == '__main__':
+    if args.dry_run:
+        dry_run()
+        raise SystemExit
     sw_base.mkdir(parents=True, exist_ok=True)
     settings_path = sw_base / 'settings.json'
     if settings_path.exists():

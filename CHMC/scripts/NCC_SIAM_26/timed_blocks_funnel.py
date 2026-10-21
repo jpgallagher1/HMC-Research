@@ -38,8 +38,8 @@ Ts = [1.0, 2.0, 3.0, 4.0, 5.0]
 
 block_size = 200
 num_samples = 10_000
-match_time_to = 'Newt'         # methods below continue past num_samples until their
-extend_methods = ['LF', 'AA', 'FPI']   # cumulative wall time reaches this method's at num_samples
+match_time_to = 'AA'           # methods below continue past num_samples until their
+extend_methods = ['LF', 'FPI']         # cumulative wall time reaches this method's at num_samples
 seed = 1
 tol = 1e-3
 max_iter = 10                  # K cap for Newton; iteration cap for AA and FPI
