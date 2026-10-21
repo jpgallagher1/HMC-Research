@@ -3,6 +3,7 @@ __pycache__/
 *.DS_Store
 *.gitattributes
 CHMC_FALL_2025/*
+CHMC/scripts/compute_heatmaps/neals_results/*
 CHMC/scratch.ipynb
 CHMC/Sandbox/*
 plots/*
@@ -12,3 +13,4 @@ mcmc_results/*
 docs/superpowers/
 .vscode/*
 file_tree_*.txt
+results/*

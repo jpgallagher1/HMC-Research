@@ -1,0 +1,166 @@
+# October 20, 2026
+# Sliced Wasserstein error for Neal's funnel (timed_blocks_funnel.py output): compute only.
+# One sliced W_p value per (method, tau, T, run, chain length), computed in parallel over chains and
+# saved to OUTPUT/sw_data/METHOD/tau_*/T_*/run_*.npz after every length, so an interrupted job
+# resumes where it stopped. Plots are made from sw_data by timed_blocks_funnel_plots.py.
+# Sliced W_p follows the p-Gauss scripts: 10_000 exact target samples, 1000 projections, p = 1, fixed seed.
+
+import os
+# One thread per worker; the parallelism is across chains.
+for _var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
+    os.environ[_var] = '1'
+
+from pathlib import Path
+import argparse
+import json
+import multiprocessing as mp
+import time
+
+import numpy as np
+import ot
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+n_ref = 10_000              # exact funnel samples used as the reference measure
+n_projections = 1000        # random directions; the same ones are used for every chain
+sw_p = 1                    # sliced W_p: 1 gives sliced W_1 (mean over directions of 1D W_1)
+ref_seed = 0
+
+base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_blocks')
+parser = argparse.ArgumentParser()
+parser.add_argument('--output', type=Path, default=base)
+parser.add_argument('--workers', type=int, default=None)    # default: SLURM_CPUS_PER_TASK, else all cores
+parser.add_argument('--n_projections', type=int, default=n_projections)
+args = parser.parse_args()
+base = args.output
+n_projections = args.n_projections
+n_workers = args.workers or int(os.environ.get('SLURM_CPUS_PER_TASK', os.cpu_count()))
+sw_base = base / 'sw_data'
+
+with open(base / 'metadata.json') as f:
+    metadata = json.load(f)
+
+methods = metadata['methods']
+taus = metadata['taus']
+Ts = metadata['Ts']
+dim = metadata['dim']
+block_size = metadata['block_size']
+
+folders = list(base.glob('*/tau_*/T_*/run_*'))
+if not folders:
+    raise ValueError('No saved runs found.')
+n_runs = max(int(folder.name.split('_')[1]) for folder in folders) + 1
+nblocks = max(len(list(folder.glob('block_*.npz'))) for folder in folders)
+if nblocks == 0:
+    raise ValueError('No saved blocks found.')
+# Chain lengths to evaluate: 200, 400, 600, 800, 1000, 2000, ..., 10_000 (up to what was saved).
+# Extended chains (matched to Newt's wall time) are also evaluated every 5000 past 10_000.
+lens = np.array([n for n in [*range(200, 1000, 200), *range(1000, 10_001, 1000),
+                             *range(15_000, nblocks * block_size + 1, 5000)]
+                 if n <= nblocks * block_size])
+
+# Exact funnel samples: y ~ N(0, 3^2), x_i | y ~ N(0, exp(y)) for the other dim - 1 coordinates.
+rng = np.random.default_rng(ref_seed)
+y = rng.normal(0.0, 3.0, size=n_ref)
+x = rng.normal(size=(n_ref, dim - 1)) * np.exp(y / 2)[:, None]
+xt = np.column_stack([y, x])                                             # (n_ref, dim)
+
+settings = dict(n_ref=n_ref, n_projections=n_projections, p=sw_p, ref_seed=ref_seed, dim=dim)
+
+
+def chain_folder(meth, j, k, i):
+    return base / meth / f'tau_{taus[j]}' / f'T_{Ts[k]}' / f'run_{i}'
+
+
+def sw_path(meth, j, k, i):
+    return sw_base / meth / f'tau_{taus[j]}' / f'T_{Ts[k]}' / f'run_{i}.npz'
+
+
+def compute_chain(task):
+    """Sliced W_p of one chain's prefixes at every length in `lens`, saved after each length."""
+    meth, j, k, i = task
+    blocks, block_times = [], []
+    for l in range(nblocks):
+        path = chain_folder(meth, j, k, i) / f'block_{l:08d}.npz'
+        if not path.exists():
+            break
+        with np.load(path) as result:
+            blocks.append(result['q'])
+            block_times.append(float(result['runtime']))
+    if not blocks:
+        return task, 0, 0.0
+    full_chain = np.concatenate(blocks, axis=0)
+    edges = np.arange(len(blocks) + 1) * block_size
+    cum_time = np.concatenate([[0.0], np.cumsum(block_times)])
+
+    out = sw_path(meth, j, k, i)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sw = np.full(len(lens), np.nan)
+    runtime = np.full(len(lens), np.nan)
+    if out.exists():                                   # reuse values already computed for these lengths
+        with np.load(out) as old:
+            for L, value, t in zip(old['lens'], old['sw'], old['runtime']):
+                hit = np.nonzero(lens == L)[0]
+                if hit.size:
+                    sw[hit[0]], runtime[hit[0]] = value, t
+
+    start = time.perf_counter()
+    done = 0
+    for l, length in enumerate(lens):
+        if length > len(full_chain):
+            break
+        runtime[l] = np.interp(length, edges, cum_time)
+        if np.isfinite(sw[l]):
+            continue
+        chain = full_chain[:length]
+        if np.isfinite(chain).all():
+            sw[l] = ot.sliced_wasserstein_distance(
+                chain, xt, n_projections=n_projections, p=sw_p, seed=ref_seed)
+        done += 1
+        temporary = out.with_name(out.name + f'.tmp{os.getpid()}')
+        with temporary.open('wb') as f:
+            np.savez(f, lens=lens, sw=sw, runtime=runtime, n_samples=len(full_chain),
+                     n_projections=n_projections, n_ref=n_ref, p=sw_p)
+        os.replace(temporary, out)
+    return task, done, time.perf_counter() - start
+
+
+if __name__ == '__main__':
+    sw_base.mkdir(parents=True, exist_ok=True)
+    settings_path = sw_base / 'settings.json'
+    if settings_path.exists():
+        if json.loads(settings_path.read_text()) != settings:
+            raise ValueError('Saved sliced-Wasserstein settings differ. Use a new output directory '
+                             f'or delete {sw_base}.')
+    else:
+        temporary = settings_path.with_name(f'settings.tmp{os.getpid()}')
+        temporary.write_text(json.dumps(settings, indent=2))
+        os.replace(temporary, settings_path)
+
+    tasks = []
+    for meth in methods:
+        for j in range(len(taus)):
+            for k in range(len(Ts)):
+                for i in range(n_runs):
+                    n_files = len(list(chain_folder(meth, j, k, i).glob('block_*.npz')))
+                    if n_files:
+                        tasks.append((n_files, (meth, j, k, i)))
+    tasks = [task for _, task in sorted(tasks, key=lambda item: -item[0])]   # longest chains first
+
+    print(f'{len(tasks)} chains, {len(lens)} lengths, {n_projections} projections, '
+          f'{n_workers} workers', flush=True)
+    t0 = last_print = time.perf_counter()
+    finished = computed = 0
+    with mp.get_context('spawn').Pool(n_workers) as pool:
+        for task, done, seconds in pool.imap_unordered(compute_chain, tasks, chunksize=1):
+            finished += 1
+            computed += done
+            now = time.perf_counter()
+            if now - last_print >= (10 if now - t0 < 300 else 60) or finished == len(tasks):
+                last_print = now
+                rate = finished / (now - t0)
+                print(f'[{now - t0:.0f}s] {finished}/{len(tasks)} chains done, {computed} lengths computed, '
+                      f'~{(len(tasks) - finished) / rate / 60:.1f} min left', flush=True)
+    print(f'Finished in {time.perf_counter() - t0:.0f}s; data in {sw_base}', flush=True)

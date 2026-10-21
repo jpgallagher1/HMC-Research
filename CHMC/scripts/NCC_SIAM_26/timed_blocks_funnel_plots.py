@@ -1,13 +1,12 @@
 # October 20, 2026
-# Sliced Wasserstein error plots for Neal's funnel (timed_blocks_funnel.py output),
-# in the style of timed_blocks_plots.py.
+# Sliced Wasserstein error plots for Neal's funnel, in the style of timed_blocks_plots.py.
+# Plotting only: reads OUTPUT/sw_data written by timed_blocks_funnel_sw.py and computes nothing.
 
 from pathlib import Path
 import argparse
 import json
 
 import numpy as np
-import ot
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -16,96 +15,58 @@ import matplotlib.pyplot as plt
 # Configuration
 # =============================================================================
 
-n_ref = 10_000              # exact funnel samples used as the reference measure
-n_projections = 100         # random directions; the same ones are used for every chain
-sw_p = 1                    # sliced W_p: 1 gives sliced W_1 (mean over directions of 1D W_1)
-ref_seed = 0
-
 base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_blocks')
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=base)
 parser.add_argument('--ppt', type=lambda x: x.lower() in ('true', '1', 'yes'), default=False)   # True: 16 pt text
 args = parser.parse_args()
 base = args.output
+sw_base = base / 'sw_data'
 plotpath = base / ('plot_ppt' if args.ppt else 'plot')
 plotpath.mkdir(exist_ok=True)
 
 with open(base / 'metadata.json') as f:
     metadata = json.load(f)
+with open(sw_base / 'settings.json') as f:
+    sw_settings = json.load(f)
 
 methods = metadata['methods']
 taus = metadata['taus']
 Ts = metadata['Ts']
 dim = metadata['dim']
-block_size = metadata['block_size']
+sw_p = sw_settings['p']
 markers = {'LF': '-o', 'AA': '-*', 'Newt': '-^', 'Newton': '-^', 'N_K': '-^', 'FPI': '-v'}
 labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': r'CHMC-Newt', 'Newton': r'CHMC-Newt', 'N_K': r'CHMC-Newt', 'FPI': 'CHMC-FPI'}
 
 # =============================================================================
-# Load the saved blocks
+# Load the saved sliced Wasserstein values
 # =============================================================================
 
-folders = list(base.glob('*/tau_*/T_*/run_*'))
-if not folders:
-    raise ValueError('No saved runs found.')
-n_runs = max(int(folder.name.split('_')[1]) for folder in folders) + 1
-nblocks = max(len(list(folder.glob('block_*.npz'))) for folder in folders)
-if nblocks == 0:
-    raise ValueError('No saved blocks found.')
-# Chain lengths to evaluate: 200, 400, 600, 800, 1000, 2000, ..., 10_000 (up to what was saved).
-# Extended chains (matched to Newt's wall time) are also evaluated every 5000 past 10_000.
-lens = np.array([n for n in [*range(200, 1000, 200), *range(1000, 10_001, 1000),
-                             *range(15_000, nblocks * block_size + 1, 5000)]
-                 if n <= nblocks * block_size])
+def sw_path(meth, j, k, i):
+    return sw_base / meth / f'tau_{taus[j]}' / f'T_{Ts[k]}' / f'run_{i}.npz'
 
-# Exact funnel samples: y ~ N(0, 3^2), x_i | y ~ N(0, exp(y)) for the other dim - 1 coordinates.
-rng = np.random.default_rng(ref_seed)
-y = rng.normal(0.0, 3.0, size=n_ref)
-x = rng.normal(size=(n_ref, dim - 1)) * np.exp(y / 2)[:, None]
-xt = np.column_stack([y, x])                                             # (n_ref, dim)
+
+files = list(sw_base.glob('*/tau_*/T_*/run_*.npz'))
+if not files:
+    raise ValueError(f'No sliced Wasserstein data found in {sw_base}; run timed_blocks_funnel_sw.py first.')
+n_runs = max(int(path.stem.split('_')[1]) for path in files) + 1
+lens = np.unique(np.concatenate([np.load(path)['lens'] for path in files]))
 
 # Same axis order as the p-chi plotting notebook: tau, T, length, run.
 shape = (len(taus), len(Ts), len(lens), n_runs)
 hmc_sw_metrics = {meth: np.full(shape, np.nan) for meth in methods}
 hmc_runtimes = {meth: np.full(shape, np.nan) for meth in methods}
-
 for meth in methods:
     for j in range(len(taus)):
         for k in range(len(Ts)):
             for i in range(n_runs):
-                folder = base / meth / f'tau_{taus[j]}' / f'T_{Ts[k]}' / f'run_{i}'
-                blocks, block_times = [], []
-                for l in range(nblocks):
-                    path = folder / f'block_{l:08d}.npz'
-                    if not path.exists():
-                        break
-                    with np.load(path) as result:
-                        # Retain repeated positions after rejection in the chain.
-                        blocks.append(result['q'])
-                        block_times.append(float(result['runtime']))
-                if not blocks:
+                path = sw_path(meth, j, k, i)
+                if not path.exists():
                     continue
-                full_chain = np.concatenate(blocks, axis=0)
-                # Cumulative runtime at each saved block edge; linear within a block.
-                edges = np.arange(len(blocks) + 1) * block_size
-                cum_time = np.concatenate([[0.0], np.cumsum(block_times)])
-
-                for l, length in enumerate(lens):
-                    if length > len(full_chain):
-                        break
-                    chain = full_chain[:length]
-                    hmc_runtimes[meth][j, k, l, i] = np.interp(length, edges, cum_time)
-                    if not np.isfinite(chain).all():
-                        print(f'Nonfinite positions in {folder} by length {length}; metric left NaN')
-                        continue
-                    hmc_sw_metrics[meth][j, k, l, i] = ot.sliced_wasserstein_distance(
-                        chain, xt, n_projections=n_projections, p=sw_p, seed=ref_seed)
-
-np.savez(
-    base / 'sw_metrics.npz', lens=lens, taus=taus, Ts=Ts,
-    **{f'{meth}_sw_metric': hmc_sw_metrics[meth] for meth in methods},
-    **{f'{meth}_runtime': hmc_runtimes[meth] for meth in methods},
-)
+                with np.load(path) as data:
+                    at = np.searchsorted(lens, data['lens'])
+                    hmc_sw_metrics[meth][j, k, at, i] = data['sw']
+                    hmc_runtimes[meth][j, k, at, i] = data['runtime']
 
 # =============================================================================
 # Plot individual runs and means, as in the p-chi plots
