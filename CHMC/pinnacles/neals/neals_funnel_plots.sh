@@ -9,7 +9,7 @@
 
 # Plots only: reads ${OUTPUT}/sw_data written by neals_funnel_sw.sh and computes nothing.
 # Plots go to ${OUTPUT}/plot/sw/tau_*/T_*/ (or plot_ppt/ with --ppt True).
-# Add --ppt True to the python line for the 16 pt slide versions.
+# --ppt 1 gives the 16 pt slide versions (plot_ppt/); remove it for the regular plots.
 
 cd /data/johngallagher/HMC-Research
 source ~/.bashrc
@@ -18,4 +18,4 @@ conda activate HMC-Research
 SCRIPT_DIR=/home/johngallagher/data/HMC-Research/CHMC/scripts/NCC_SIAM_26
 OUTPUT=/scratch/johngallagher/neals_funnel_blocks
 
-python -u ${SCRIPT_DIR}/timed_blocks_funnel_plots.py --output ${OUTPUT}
+python -u ${SCRIPT_DIR}/timed_blocks_funnel_plots.py --output ${OUTPUT} --ppt 1

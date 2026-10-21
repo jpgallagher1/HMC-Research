@@ -55,7 +55,7 @@ def load_result(base, method, tau, T, length, run):
         Path(base)
         / method
         / f"tau_{float(tau):.12g}"
-        / f"T_{float(T):.12g}"
+        / f"T_{float(T):.1f}"
         / f"len_{int(length)}"
         / f"run_{run}.npz"
     )
