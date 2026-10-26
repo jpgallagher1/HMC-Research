@@ -80,7 +80,7 @@ for j in range(len(taus)):
         if not any(np.isfinite(hmc_sw_metrics[meth][j, k]).any() for meth in methods):
             continue
         # loglog against iterations, semilog against time
-        for xaxis, scale in [('iter', 'loglog'), ('time', 'semilog')]:
+        for xaxis, scale in [('iter', 'loglog'), ('time', 'semilog'), ('time', 'loglog')]:
             fig = plt.figure(figsize=(8, 6))
             for Cidx, meth in enumerate(methods):
                 errors = hmc_sw_metrics[meth][j, k, :, :]
