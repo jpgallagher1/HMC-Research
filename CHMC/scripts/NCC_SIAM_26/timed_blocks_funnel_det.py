@@ -104,7 +104,7 @@ t0 = last_print = time.perf_counter()
 for h, meth in sorted(enumerate(methods), key=lambda hm: hm[1] != match_time_to):
     configs = gen_configs(
         taus, Ts, tol=tol, max_iter=max_iter, n_pts=n_pts,
-        integrator=integrators[h], gen_gauss=False, AA_beta=1, AA_m=m, log_det=True
+        integrator=integrators[h], gen_gauss=False, AA_beta=1, AA_m=m, logdet=True
     )                                   # configs[k][j]: T index, tau index
 
     for j in range(len(taus)):
