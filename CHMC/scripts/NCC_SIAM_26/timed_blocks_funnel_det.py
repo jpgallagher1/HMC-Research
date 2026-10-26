@@ -2,6 +2,8 @@
 # Neal's funnel (d = 10): y ~ N(0, 3^2), x_i | y ~ N(0, exp(y)).
 # Continue each chain in timed blocks of 200 and save each block immediately.
 # Same layout as timed_blocks.py; analysis is sliced Wasserstein in timed_blocks_funnel_plots.py.
+# The implicit integrators run with config.logdet = True: the Metropolis ratio includes the
+# log|det J| of each proposal (see sampler.py), and it is saved per proposal in each block as `logdets`.
 
 import sys
 from pathlib import Path
@@ -173,8 +175,11 @@ for h, meth in sorted(enumerate(methods), key=lambda hm: hm[1] != match_time_to)
 
                     # Timed block: continue from the preceding block's final state.
                     start = time.perf_counter()
-                    last, (qps, deltaHs, accepted) = scan_sampler(init, chain_keys)
-                    jax.block_until_ready((last, qps, deltaHs, accepted))
+                    last, outs = scan_sampler(init, chain_keys)
+                    jax.block_until_ready((last, outs))
+                    qps, deltaHs, accepted = outs[:3]
+                    # CHMC kernels with config.logdet also return log|det J| per proposal; leapfrog is volume preserving
+                    logdets = np.asarray(outs[3]) if len(outs) > 3 else np.zeros(block_size)
                     runtime = time.perf_counter() - start
                     elapsed += runtime
 
@@ -184,7 +189,7 @@ for h, meth in sorted(enumerate(methods), key=lambda hm: hm[1] != match_time_to)
                     with temporary.open('wb') as f:
                         np.savez(
                             f, q=np.asarray(qps.q), p=np.asarray(qps.p),
-                            deltaHs=np.asarray(deltaHs), accepted=np.asarray(accepted),
+                            deltaHs=np.asarray(deltaHs), accepted=np.asarray(accepted), logdets=logdets,
                             runtime=runtime, cumulative_runtime=elapsed,
                             start=l*block_size, stop=(l+1)*block_size, start_qp=start_qp,
                             end_qp=np.asarray(last[0].x), end_deltaH=np.asarray(last[1]),
