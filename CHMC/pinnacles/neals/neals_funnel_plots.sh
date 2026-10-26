@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=neals_plots
-#SBATCH --partition=short
+#SBATCH --partition=test
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --mem=8G
-#SBATCH --time=0-1:00:00
+#SBATCH --time=0-00:30:00
 #SBATCH --output=neals_plots_%j.out
 
 # Plots only: reads ${OUTPUT}/sw_data written by neals_funnel_sw.sh and computes nothing.
