@@ -74,7 +74,7 @@ def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
     p_new = jr.normal(drawkey, shape=qp.q.shape)
     return QP.from_qp(q=qp.q, p=p_new), None
 
-def accept_reject(delta_H: float, key: jax.random.PRNGKey) -> bool:
+def accept_reject(delta_H: float,key: jax.random.PRNGKey, log_det_jac: float = 0.0) -> bool:
     """
     Metropolis-Hastings accept/reject step.
     
@@ -87,9 +87,8 @@ def accept_reject(delta_H: float, key: jax.random.PRNGKey) -> bool:
     Returns:
         True if accepted, False otherwise
     """
-    _, drawkey = jr.split(key)
-    alpha = jnp.minimum(1.0, jnp.exp(delta_H))
-    u = jr.uniform(drawkey, shape=())
+    alpha = jnp.minimum(1.0, jnp.exp(-delta_H+log_det_jac))
+    u = jr.uniform(key, shape=())
     return u <= alpha
 
 def gen_hmc_kernel(
@@ -123,16 +122,16 @@ def gen_hmc_kernel(
             (carry_out, carry_out) for scan
         """
         qp, _, _ = carry_in
-        
+        key_draw, key_accept_reject = jr.split(key)
         # Resample momentum
-        qp0, _ = draw_momentum(qp, key)
+        qp0, _ = draw_momentum(qp, key_draw)
         
         # Integrate
         qp_star = integrator(qp0)
         
         # Accept/reject
         delta_H = H(qp0) - H(qp_star)  # -(final - init)
-        is_accepted = accept_reject(delta_H, key)
+        is_accepted = accept_reject(delta_H, key_accept_reject)
         
         qp_out = jnp.where(is_accepted, qp_star.x, qp0.x)
         carry_out = [QP(qp_out), delta_H, is_accepted]
@@ -191,16 +190,18 @@ def gen_chmc_kernel(
             (carry_out, carry_out) for scan
         """
         qp, _, _ = carry_in
-        
+
+        key_draw, key_accept_reject = jr.split(key)
+
         # Resample momentum
-        qp0, _ = draw_momentum(qp, key)
+        qp0, _ = draw_momentum(qp, key_draw)
         
         # Integrate with implicit method
         qp_star = integrator(qp0)
         
         # Accept/reject
-        delta_H = H(qp0) - H(qp_star) # -(final - init)
-        is_accepted = accept_reject(delta_H, key)
+        delta_H = H(qp_star) -H(qp0) # (final - init)
+        is_accepted = accept_reject(delta_H, key_accept_reject)
         
         qp_out_x = jnp.where(is_accepted, qp_star.x, qp0.x)
         carry_out = [QP(qp_out_x), delta_H, is_accepted]

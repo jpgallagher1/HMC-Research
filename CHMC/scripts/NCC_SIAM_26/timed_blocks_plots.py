@@ -38,7 +38,7 @@ tol = metadata['tol']              # solver tolerance
 max_iter = metadata['max_iter']    # solver iteration cap (Newton K; AA and FPI cap)
 true_cov = np.asarray(metadata['covariance'])
 markers = {'LF': '-o', 'AA': '-*', 'Newt': '-^', 'Newton': '-^', 'FPI': '-v'}
-labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': r'CHMC-Newt', 'Newton': r'CHMC-Newt', 'FPI': 'CHMC-FPI'}
+labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': r'CHMC-Newton', 'Newton': r'CHMC-Newton', 'FPI': 'CHMC-FPI'}
 
 # =============================================================================
 # Load the saved blocks

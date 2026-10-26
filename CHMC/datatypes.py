@@ -92,6 +92,7 @@ class IntegratorConfig (NamedTuple):
     trajectory: bool = False # THIS IS NEW ####
     gen_gauss: bool = False
     debug: bool = False
+    logdet: bool = False
 
 def gen_configs(taus, Ts, **kw):
     """

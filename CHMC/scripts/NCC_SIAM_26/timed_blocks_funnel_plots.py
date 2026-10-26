@@ -36,7 +36,7 @@ Ts = metadata['Ts']
 dim = metadata['dim']
 sw_p = sw_settings['p']
 markers = {'LF': '-o', 'AA': '-*', 'Newt': '-^', 'Newton': '-^', 'N_K': '-^', 'FPI': '-v'}
-labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': r'CHMC-Newt', 'Newton': r'CHMC-Newt', 'N_K': r'CHMC-Newt', 'FPI': 'CHMC-FPI'}
+labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': r'CHMC-Newton', 'Newton': r'CHMC-Newton', 'N_K': r'CHMC-Newton-Krylov', 'FPI': 'CHMC-FPI'}
 
 # =============================================================================
 # Load the saved sliced Wasserstein values

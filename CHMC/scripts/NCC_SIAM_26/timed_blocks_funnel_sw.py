@@ -75,6 +75,18 @@ xt = np.column_stack([y, x])                                             # (n_re
 settings = dict(n_ref=n_ref, n_projections=n_projections, p=sw_p, ref_seed=ref_seed, dim=dim)
 
 
+def remaining_lengths(task, n_samples):
+    """Lengths of this chain (up to n_samples) with no saved sliced W value yet."""
+    meth, j, k, i = task
+    wanted = lens[lens <= n_samples]
+    path = sw_path(meth, j, k, i)
+    if not path.exists():
+        return wanted
+    with np.load(path) as old:
+        saved = old['lens'][np.isfinite(old['sw'])]
+    return wanted[~np.isin(wanted, saved)]
+
+
 def chain_folder(meth, j, k, i):
     return base / meth / f'tau_{taus[j]}' / f'T_{Ts[k]}' / f'run_{i}'
 
@@ -135,27 +147,34 @@ def compute_chain(task):
 def dry_run():
     """Chain lengths per method and a rough cost estimate. Reads file names only."""
     seconds_per_1000 = 0.4 * n_projections / 1000        # measured: ~0.4 s per 1000 samples at 1000 directions
-    total = 0.0
+    total = total_left = 0.0
     print(f'{n_projections} directions; evaluating {len(lens)} lengths up to {max_len:,}: '
           f'{lens[:3].tolist()} ... {lens[-3:].tolist()}')
     longest = 0
     for meth in methods:
-        n_samples = []
+        n_samples, keys = [], []
         for j in range(len(taus)):
             for k in range(len(Ts)):
                 for i in range(n_runs):
                     n = block_size * len(list(chain_folder(meth, j, k, i).glob('block_*.npz')))
                     if n:
                         n_samples.append(n)
+                        keys.append((j, k, i))
         n_samples = np.array(n_samples)
         cost = sum(float(np.sum(lens[lens <= n])) for n in n_samples) / 1000 * seconds_per_1000
+        left = sum(float(np.sum(remaining_lengths((meth, j, k, i), n)))
+                   for (j, k, i), n in zip(keys, n_samples)) / 1000 * seconds_per_1000
+        n_left = sum(remaining_lengths((meth, j, k, i), n).size > 0 for (j, k, i), n in zip(keys, n_samples))
         total += cost
+        total_left += left
         longest = max(longest, min(n_samples.max(), max_len))
         print(f'  {meth:5s} {len(n_samples):4d} chains, samples min/median/max = '
               f'{n_samples.min():,} / {int(np.median(n_samples)):,} / {n_samples.max():,}; '
-              f'~{cost / 3600:.1f} core-hours')
-    print(f'Estimated total: {total / 3600:.1f} core-hours, so about {total / 3600 / n_workers:.1f} h on '
-          f'{n_workers} workers (rough; assumes perfect load balance).')
+              f'~{cost / 3600:.1f} core-hours, {left / 3600:.1f} still to do '
+              f'({n_left} chains have work left)')
+    print(f'Estimated total: {total / 3600:.1f} core-hours; still to do: {total_left / 3600:.1f} core-hours, '
+          f'so about {total_left / 3600 / n_workers * 60:.0f} min on {n_workers} workers '
+          f'(rough; assumes perfect load balance).')
     print(f'Peak memory per worker: about {longest * n_projections * 30 / 1e9:.1f} GB '
           f'(longest prefix evaluated: {longest:,} samples).')
 
@@ -183,20 +202,29 @@ if __name__ == '__main__':
                     n_files = len(list(chain_folder(meth, j, k, i).glob('block_*.npz')))
                     if n_files:
                         tasks.append((n_files, (meth, j, k, i)))
-    tasks = [task for _, task in sorted(tasks, key=lambda item: -item[0])]   # longest chains first
+    tasks = sorted(tasks, key=lambda item: -item[0])                          # longest chains first
+    # Work left per chain, in samples evaluated (cost is roughly proportional to it). Chains that are
+    # already complete have none, so they do not distort the time estimate when a job is resumed.
+    work = {task: float(np.sum(remaining_lengths(task, block_size * n_files))) for n_files, task in tasks}
+    tasks = [task for _, task in tasks]
+    total_work = sum(work.values())
 
     print(f'{len(tasks)} chains, {len(lens)} lengths, {n_projections} projections, '
-          f'{n_workers} workers', flush=True)
+          f'{n_workers} workers; {sum(w > 0 for w in work.values())} chains have work left', flush=True)
     t0 = last_print = time.perf_counter()
     finished = computed = 0
+    done_work = 0.0
     with mp.get_context('spawn').Pool(n_workers) as pool:
         for task, done, seconds in pool.imap_unordered(compute_chain, tasks, chunksize=1):
             finished += 1
             computed += done
+            done_work += work[task]
             now = time.perf_counter()
             if now - last_print >= (10 if now - t0 < 300 else 60) or finished == len(tasks):
                 last_print = now
-                rate = finished / (now - t0)
+                # Time left from the work finished so far; the longest chains run first, so this
+                # tends to be pessimistic early on and the tail (idle workers) is not modelled.
+                left = (total_work - done_work) / (done_work / (now - t0)) / 60 if done_work else float('nan')
                 print(f'[{now - t0:.0f}s] {finished}/{len(tasks)} chains done, {computed} lengths computed, '
-                      f'~{(len(tasks) - finished) / rate / 60:.1f} min left', flush=True)
+                      f'{100 * done_work / max(total_work, 1):.0f}% of the work, ~{left:.0f} min left', flush=True)
     print(f'Finished in {time.perf_counter() - t0:.0f}s; data in {sw_base}', flush=True)
