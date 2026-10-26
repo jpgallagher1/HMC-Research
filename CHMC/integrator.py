@@ -326,13 +326,13 @@ def gen_logdet(AVFfunc):
     """
     G_flat = lambda x0, x1: AVFfunc(QP(x0), QP(x1)).x # flat so jacfwd gives (2*dim, 2*dim), not QP(QP(...))
     jacG = jax.jacfwd(G_flat, argnums=(0, 1))
-    def logdet(qp0: QP, qp1: QP):
+    def step_logdet(qp0: QP, qp1: QP):
         G0, G1 = jacG(qp0.x, qp1.x) # (2*dim, 2*dim) each
         I = jnp.eye(G1.shape[0], dtype=G1.dtype)
-        sign0, log_det0 = jnp.linalg.slogdet(G0)
-        sign1, log_det1 = jnp.linalg.slogdet(I - G1)
-        return log_det0 - log_det1, sign0*sign1
-    return logdet
+        sign0, logdet0 = jnp.linalg.slogdet(G0)
+        sign1, logdet1 = jnp.linalg.slogdet(I - G1)
+        return logdet0 - logdet1, sign0*sign1
+    return step_logdet
 
 def gen_FPI(func, config):
     """
@@ -354,8 +354,8 @@ def gen_FPI(func, config):
         resid = jnp.linalg.norm(x_next.x - x_last.x)
         # if config.logdet:
         #     jacF = jax.jacfwd(func)
-        #     log_det = jnp.linalg.slogdet(jacF(xn, x_next).x.x)
-        #     return x_next, log_det, (x_next, n_iter, resid)
+        #     logdet = jnp.linalg.slogdet(jacF(xn, x_next).x.x)
+        #     return x_next, logdet, (x_next, n_iter, resid)
         # else:
         return x_next, (x_next, n_iter, resid)     # scan now iters & residual per step
     return FPI
@@ -363,31 +363,32 @@ def gen_FPI(func, config):
 def gen_AVF_FPI_T(gradH_flat, config):
     """
     debug returns all scan outputs:
-        final_state, log_det, traj, iters, resids, log_dets, signs
+        final_state, traj, iters, resids                       (+ logdet, logdets, signs if config.logdet)
+    config.logdet (not debug) returns final_state, logdet
     """
     AVFfunc = gen_AVF(gradH_flat, config)
     AVF_FPI = gen_FPI(AVFfunc, config)
-    logdet = gen_logdet(AVFfunc)
+    step_logdet = gen_logdet(AVFfunc)
     def body_step(carry, _):
-        xi, log_det = carry
+        xi, logdet = carry
         x_next, (_, n_iter, resid) = AVF_FPI(xi, None)
         if config.logdet: # python bool, jacobians only traced when on
-            log_det_i, sign = logdet(xi, x_next)
+            logdet_i, sign = step_logdet(xi, x_next)
         else:
-            log_det_i, sign = jnp.zeros_like(log_det), jnp.ones_like(log_det)
-        log_det = log_det + log_det_i
-        return (x_next, log_det), (x_next, n_iter, resid, log_det, sign)
+            logdet_i, sign = jnp.zeros_like(logdet), jnp.ones_like(logdet)
+        logdet = logdet + logdet_i
+        return (x_next, logdet), (x_next, n_iter, resid, logdet, sign)
     def AVF_FPI_T(θω_init):
-        (final_state, log_det), (traj, iters, resids, log_dets, signs) = jax.lax.scan(
+        (final_state, logdet), (traj, iters, resids, logdets, signs) = jax.lax.scan(
             body_step,
             (θω_init, jnp.zeros((), θω_init.x.dtype)),
             None,
             config.N,
         )
-        if config.debug:
-            return final_state, log_det, traj, iters, resids, log_dets, signs
+        if config.debug: # original order, logdet outputs appended only when on
+            return (final_state, traj, iters, resids) + ((logdet, logdets, signs) if config.logdet else ())
         elif config.logdet:
-            return final_state, log_det
+            return final_state, logdet
         else:
             return final_state
     return AVF_FPI_T
@@ -395,10 +396,11 @@ def gen_AVF_FPI_T(gradH_flat, config):
 def gen_AVF_AA_T(gradH_flat, config):
     """
     debug returns all scan outputs:
-        final_state, log_det, traj, iters, log_dets, signs
+        final_state, traj, iters                               (+ logdet, logdets, signs if config.logdet)
+    config.logdet (not debug) returns final_state, logdet
     """
     AVF = gen_AVF(gradH_flat, config)
-    logdet = gen_logdet(AVF)
+    step_logdet = gen_logdet(AVF)
     # jaxopt AndersonAcceleration does FPI in the first entry
     AVF_rev = lambda y,x0: AVF(x0, y)
 
@@ -408,27 +410,27 @@ def gen_AVF_AA_T(gradH_flat, config):
         Body Function for scan
         AA for one dt, timestep.
         """
-        xi, log_det = carry
+        xi, logdet = carry
         init_guess = AVF(xi, xi)
         out = AVF_AA.run(init_guess, xi)
         if config.logdet: # python bool, jacobians only traced when on
-            log_det_i, sign = logdet(xi, out.params)
+            logdet_i, sign = step_logdet(xi, out.params)
         else:
-            log_det_i, sign = jnp.zeros_like(log_det), jnp.ones_like(log_det)
-        log_det = log_det + log_det_i
-        return (out.params, log_det), (out.params, out.state.iter_num, log_det, sign)
+            logdet_i, sign = jnp.zeros_like(logdet), jnp.ones_like(logdet)
+        logdet = logdet + logdet_i
+        return (out.params, logdet), (out.params, out.state.iter_num, logdet, sign)
 
     def AVF_AA_T(θω_init):
 
-        (final_state, log_det), (traj, iters, log_dets, signs)  = jax.lax.scan(AVF_AA_t,
+        (final_state, logdet), (traj, iters, logdets, signs)  = jax.lax.scan(AVF_AA_t,
                                                            (θω_init, jnp.zeros((), θω_init.x.dtype)),
                                                            None,
                                                            config.N
                                                            )
-        if config.debug:
-            return final_state, log_det, traj, iters, log_dets, signs
+        if config.debug: # original order, logdet outputs appended only when on
+            return (final_state, traj, iters) + ((logdet, logdets, signs) if config.logdet else ())
         elif config.logdet:
-            return final_state, log_det
+            return final_state, logdet
         else:
             return final_state
     return AVF_AA_T
@@ -556,10 +558,11 @@ def gen_AVF_NewtonFPI_T(gradH_flat, config, β=4):
     then used for generalized-p-gauss
 
     debug returns all scan outputs:
-        last, log_det, traj, iters, resids, log_dets, signs
+        last, traj, iters, resids                              (+ logdet, logdets, signs if config.logdet)
+    config.logdet (not debug) returns last, logdet
     """
     AVF = gen_AVF(gradH_flat, config)
-    logdet = gen_logdet(AVF) # exact jacobian, NOT the diag approx used for the gen_gauss solve
+    step_logdet = gen_logdet(AVF) # exact jacobian, NOT the diag approx used for the gen_gauss solve
     def cond(carry):
         i, _, dnorm = carry
         return (dnorm > config.tol) & (i < config.max_iter)
@@ -598,19 +601,19 @@ def gen_AVF_NewtonFPI_T(gradH_flat, config, β=4):
             return  QP(x_next), (n_iter, QP(x_next), residual) # QP in traj, matches gen_gauss branch
     def integrate_T(qp_init):
         def Newton_step(carry, _):
-            xi, log_det = carry
+            xi, logdet = carry
             x_next, (n_iter, _, residual) = AVF_newton_t(xi, _)
             if config.logdet: # python bool, jacobians only traced when on
-                log_det_i, sign = logdet(xi, x_next)
+                logdet_i, sign = step_logdet(xi, x_next)
             else:
-                log_det_i, sign = jnp.zeros_like(log_det), jnp.ones_like(log_det)
-            log_det = log_det + log_det_i
-            return (x_next, log_det), (n_iter, x_next, residual, log_det, sign)
-        (last, log_det), (iters, traj, resids, log_dets, signs) = jax.lax.scan(Newton_step, (qp_init, jnp.zeros((), qp_init.x.dtype)), None, config.N)
-        if config.debug:
-            return last, log_det, traj, iters, resids, log_dets, signs
+                logdet_i, sign = jnp.zeros_like(logdet), jnp.ones_like(logdet)
+            logdet = logdet + logdet_i
+            return (x_next, logdet), (n_iter, x_next, residual, logdet, sign)
+        (last, logdet), (iters, traj, resids, logdets, signs) = jax.lax.scan(Newton_step, (qp_init, jnp.zeros((), qp_init.x.dtype)), None, config.N)
+        if config.debug: # original order, logdet outputs appended only when on
+            return (last, traj, iters, resids) + ((logdet, logdets, signs) if config.logdet else ())
         elif config.logdet:
-            return last, log_det
+            return last, logdet
         else:
             return last
     return integrate_T

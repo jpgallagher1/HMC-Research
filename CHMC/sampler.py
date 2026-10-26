@@ -74,20 +74,21 @@ def draw_momentum(qp: QP, key: jax.random.PRNGKey) -> Tuple[QP, None]:
     p_new = jr.normal(drawkey, shape=qp.q.shape)
     return QP.from_qp(q=qp.q, p=p_new), None
 
-def accept_reject(delta_H: float,key: jax.random.PRNGKey, log_det_jac: float = 0.0) -> bool:
+def accept_reject(delta_H: float,key: jax.random.PRNGKey, logdet_jac: float = 0.0) -> bool:
     """
     Metropolis-Hastings accept/reject step.
     
-    Accept probability: min(1, exp(delta_H))
+    Accept probability: min(1, exp(-delta_H + logdet_jac))
     
     Args:
         delta_H: Energy difference (H_proposed - H_current)
         key: Random key
+        logdet_jac: log|det J| of the proposal map, 0. for volume preserving
         
     Returns:
         True if accepted, False otherwise
     """
-    alpha = jnp.minimum(1.0, jnp.exp(-delta_H+log_det_jac))
+    alpha = jnp.minimum(1.0, jnp.exp(-delta_H+logdet_jac))
     u = jr.uniform(key, shape=())
     return u <= alpha
 
@@ -130,8 +131,8 @@ def gen_hmc_kernel(
         qp_star = integrator(qp0)
         
         # Accept/reject
-        delta_H = H(qp0) - H(qp_star)  # -(final - init)
-        is_accepted = accept_reject(delta_H, key_accept_reject)
+        delta_H = H(qp0) - H(qp_star)  # -(final - init), stored sign kept for old outputs
+        is_accepted = accept_reject(-delta_H, key_accept_reject) # accept_reject takes (final - init)
         
         qp_out = jnp.where(is_accepted, qp_star.x, qp0.x)
         carry_out = [QP(qp_out), delta_H, is_accepted]
@@ -177,17 +178,21 @@ def gen_chmc_kernel(
         # jax.debug.print('integrator = gen_AVF_AA_T')
         integrator = gen_AVF_AA_T(gradH, config)    
     else:
-        integrator = gen_midptNewtonFPI(gradH, config, solve)
+        # implicit midpoint is symplectic -> log|det J| = 0 up to solver tol, never returns logdet
+        midpt = gen_midptNewtonFPI(gradH, config, solve)
+        integrator = (lambda qp: (midpt(qp), jnp.zeros((), qp.x.dtype))) if config.logdet else midpt
     def chmc_kernel(carry_in, key):
         """
         Single CHMC step.
         
         Args:
-            carry_in: [qp, delta_H, accepted]
+            carry_in: [qp, delta_H, accepted], same with or without config.logdet
             key: Random key
             
         Returns:
             (carry_out, carry_out) for scan
+            config.logdet: (carry_out, carry_out + [logdet]), logdet appended last so
+                           outs[0], outs[1], outs[2] keep their meaning
         """
         qp, _, _ = carry_in
 
@@ -197,15 +202,21 @@ def gen_chmc_kernel(
         qp0, _ = draw_momentum(qp, key_draw)
         
         # Integrate with implicit method
-        qp_star = integrator(qp0)
+        if config.logdet: # python bool, resolved at trace time
+            qp_star, logdet = integrator(qp0)
+        else:
+            qp_star = integrator(qp0)
+            logdet = 0.0
         
         # Accept/reject
         delta_H = H(qp_star) -H(qp0) # (final - init)
-        is_accepted = accept_reject(delta_H, key_accept_reject)
+        is_accepted = accept_reject(delta_H, key_accept_reject, logdet) # min(1, exp(-ΔH + logdet))
         
         qp_out_x = jnp.where(is_accepted, qp_star.x, qp0.x)
         carry_out = [QP(qp_out_x), delta_H, is_accepted]
         
+        if config.logdet: # logdet is per proposal, not state -> output only, carry unchanged
+            return carry_out, carry_out + [logdet]
         return carry_out, carry_out
     
     return chmc_kernel
@@ -288,7 +299,7 @@ def extract_positions(samples: Tuple, accepted_only: bool = False) -> jnp.ndarra
     Returns:
         (n_samples, dim) array of positions
     """
-    qp_samples, _, accepted = samples
+    qp_samples, accepted = samples[0], samples[2] # index, not unpack: logdet runs append logdet
 
     # Each qp_sample is a QP 'array'
     if accepted_only:
@@ -306,7 +317,7 @@ def extract_energy(samples: Tuple, accepted_only: bool = False) -> jnp.ndarray:
     Returns:
         (n_samples, dim) array of positions
     """
-    _, ΔH, accepted = samples
+    ΔH, accepted = samples[1], samples[2] # index, not unpack: logdet runs append logdet
     # Each qp_sample is a QP 'array'
     if accepted_only:
         return ΔH[accepted]
