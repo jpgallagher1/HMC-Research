@@ -6,6 +6,7 @@
 # unadjusted run (timed_blocks_funnel.py). Leapfrog is volume preserving, so its panel is the
 # same algorithm in both figures (different seeds and folders).
 # Plotting only: reads the saved block files and computes nothing else.
+# Presentation sizing: each figure fills about 0.9 x 0.7 of a 16:9 slide, 16 pt text, 14 pt ticks.
 
 import argparse
 from pathlib import Path
@@ -20,9 +21,9 @@ SCRATCH = Path("/scratch/johngallagher")
 PLOTS = Path("/home/johngallagher/data/HMC-Research/plots")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--det", type=Path, default=SCRATCH/"neals_funnel_det_tau0.0625_T3")
+parser.add_argument("--det", type=Path, default=None)          # default: SCRATCH/neals_funnel_det_tau<tau>_T<T>
 parser.add_argument("--nodet", type=Path, default=SCRATCH/"neals_funnel_blocks")
-parser.add_argument("--tau", type=float, default=0.0625)
+parser.add_argument("--tau", type=float, default=0.125)
 parser.add_argument("--T", type=float, default=3.0)
 parser.add_argument("--run", type=int, default=0)
 parser.add_argument("--n_samples", type=int, default=10_000)   # same length for every method; LF/FPI are extended past it
@@ -30,8 +31,13 @@ parser.add_argument("--sds", type=float, nargs="+", default=[1, 2])   # level se
 parser.add_argument("--plotpath", type=Path, default=PLOTS/"neals_funnel_det"/"scatter")
 args = parser.parse_args()
 
+det_base = args.det or SCRATCH/f"neals_funnel_det_tau{args.tau:g}_T{args.T:g}"
 plotpath = args.plotpath
 plotpath.mkdir(parents=True, exist_ok=True)
+
+FS = 16             # titles, axis labels, level-set labels
+plt.rcParams.update({"font.size": FS, "axes.titlesize": FS, "axes.labelsize": FS, "figure.titlesize": FS,
+                     "xtick.labelsize": 14, "ytick.labelsize": 14})
 
 methods = ["LF", "AA", "Newt"]
 LABEL = {"LF": "HMC-LF", "AA": "CHMC-AA", "Newt": "CHMC-Newton", "Newton": "CHMC-Newton"}
@@ -67,8 +73,8 @@ def load_chain(base, method, tau, T, run, n_samples):
     return np.concatenate(qs)[:n_samples], np.concatenate(accs)[:n_samples]
 
 
-runs = {"det": (args.det, r"with $\log|\det J|$ correction"),
-        "nodet": (args.nodet, r"without $\log|\det J|$ correction")}
+runs = {"det": (det_base, r"With $\log|\det J|$ correction"),
+        "nodet": (args.nodet, r"Without $\log|\det J|$ correction")}
 chains = {(rr, mm): load_chain(base, mm, args.tau, args.T, args.run, args.n_samples)
           for rr, (base, _) in runs.items() for mm in methods}
 
@@ -86,26 +92,28 @@ R2 = sd_radius2(Yx, Xg)
 lv_x = sorted(k ** 2 for k in args.sds)
 
 for rr, (base, desc) in runs.items():
-    fig, axes = plt.subplots(1, 3, figsize=(4.4 * 3, 5.2), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(12.0, 5.25), sharex=True, sharey=True)   # 0.9 x 0.7 of a 16:9 slide
     for cc, meth in enumerate(methods):
         q, acc = chains[rr, meth]
         yy, x1 = q[:, 0], q[:, 1]
 
         ax = axes[cc]
-        cs = ax.contour(Xg, Yx, R2, levels=lv_x, colors="0.35", linewidths=0.8)
-        ax.clabel(cs, fmt={l: f"{np.sqrt(l):g} sd" for l in lv_x}, fontsize=7)
-        ax.scatter(x1, yy, s=2, alpha=0.3, color=COLOR[meth], rasterized=True)
+        ax.scatter(x1, yy, s=3, alpha=0.3, color=COLOR[meth], rasterized=True)
+        cs = ax.contour(Xg, Yx, R2, levels=lv_x, colors="0.2", linewidths=1.2)
+        # labels on the top lip of each level set (x_1 = 0, y = kσ); the neck is too narrow for text
+        ax.clabel(cs, fmt={l: rf"{np.sqrt(l):g}$\sigma$" for l in lv_x}, fontsize=14,
+                  manual=[(0.0, np.sqrt(l) * SIGMA) for l in lv_x])
         ax.set_xlim(-xmax, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_xlabel(r"$x_1$")
         if cc == 0:
-            ax.set_ylabel("yy")
-        ax.set_title(f"{LABEL[meth]}  (len {yy.size}, run {args.run})\n"
-                     f"mean yy {yy.mean():.2f},  sd yy {yy.std():.2f},  min yy {yy.min():.2f}\n"
-                     f"acceptance {acc.mean():.2f}", fontsize=9)
+            ax.set_ylabel(r"$y$")
+        ax.set_title(LABEL[meth])
+        # acceptance is what flags a chain that drifted off the target (e.g. 1.00 deep in the neck)
+        ax.text(0.97, 0.04, f"accept {acc.mean():.2f}", transform=ax.transAxes,
+                ha="right", va="bottom", fontsize=14)
 
-    fig.suptitle(f"Neal's funnel samples vs 1, 2 sd level sets, {desc},  "
-                 f"$\\tau$ = {args.tau:g}, $T$ = {args.T:g}")
+    fig.suptitle(rf"{desc},  $\tau = {args.tau:g}$,  $T = {args.T:g}$")
     fig.tight_layout()
     file = f"neals_scatter_{rr}_tau{args.tau:g}_T{args.T:g}_run{args.run}.png"
     fig.savefig(plotpath / file, dpi=200)
