@@ -5,6 +5,7 @@
 from pathlib import Path
 import argparse
 import json
+import warnings
 
 import numpy as np
 import matplotlib
@@ -22,8 +23,8 @@ parser.add_argument('--ppt', type=lambda x: x.lower() in ('true', '1', 'yes'), d
 args = parser.parse_args()
 base = args.output
 sw_base = base / 'sw_data'
-plotpath = base / ('plot_ppt' if args.ppt else 'plot')
-plotpath.mkdir(exist_ok=True)
+plotpath = base / 'nanmeans' / ('plot_ppt' if args.ppt else 'plot')   # NaN-ignoring means, kept apart from the older plots
+plotpath.mkdir(parents=True, exist_ok=True)
 
 with open(base / 'metadata.json') as f:
     metadata = json.load(f)
@@ -37,6 +38,9 @@ dim = metadata['dim']
 sw_p = sw_settings['p']
 markers = {'LF': '-o', 'AA': '-*', 'Newt': '-^', 'Newton': '-^', 'N_K': '-^', 'FPI': '-v'}
 labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': r'CHMC-Newton', 'Newton': r'CHMC-Newton', 'N_K': r'CHMC-Newton-Krylov', 'FPI': 'CHMC-FPI'}
+colors = {'AA': 'C0', 'LF': 'C1', 'FPI': 'C2', 'Newt': 'C3', 'Newton': 'C3', 'N_K': 'C4'}   # as in the p-chi DRAFT plot
+plot_order = [meth for meth in ['AA', 'LF', 'FPI', 'Newt', 'Newton', 'N_K'] if meth in methods]
+legend_order = [meth for meth in ['LF', 'FPI', 'AA', 'Newt', 'Newton', 'N_K'] if meth in methods]
 
 # =============================================================================
 # Load the saved sliced Wasserstein values
@@ -82,26 +86,28 @@ for j in range(len(taus)):
         # loglog against iterations, semilog against time
         for xaxis, scale in [('iter', 'loglog'), ('time', 'semilog'), ('time', 'loglog')]:
             fig = plt.figure(figsize=(8, 6))
-            for Cidx, meth in enumerate(methods):
+            handles = {}
+            for meth in plot_order:
                 errors = hmc_sw_metrics[meth][j, k, :, :]
                 if not np.isfinite(errors).any():
                     continue
                 times = hmc_runtimes[meth][j, k, :, :]
                 x = np.broadcast_to(lens[:, None], errors.shape) if xaxis == 'iter' else times
                 plot = plt.loglog if scale == 'loglog' else plt.semilogy
-                plot(x, errors, markers[meth], color=f'C{Cidx}', alpha=0.15)
+                for i in range(errors.shape[-1]):           # each run, NaNs dropped so the line connects
+                    ok = np.isfinite(errors[:, i]) & np.isfinite(x[:, i])
+                    plot(x[ok, i], errors[ok, i], markers[meth], color=colors[meth], alpha=0.15)
 
+                # Mean over the runs that have data at each length (NaNs ignored), so the mean
+                # continues as far as the longest extended run.
                 valid = np.isfinite(errors) & np.isfinite(x)
-                counts = valid.sum(axis=-1)
-                # Average only where every run has data; extended runs end at different
-                # lengths, and a mean over a shrinking subset would jump.
-                counts = np.where(counts == errors.shape[-1], counts, 0)
-                avg_error = np.divide(np.where(valid, errors, 0).sum(axis=-1), counts,
-                                      out=np.full(len(lens), np.nan), where=counts > 0)
-                avg_x = np.divide(np.where(valid, x, 0).sum(axis=-1), counts,
-                                  out=np.full(len(lens), np.nan), where=counts > 0)
-                plot(avg_x, avg_error, markers[meth], color=f'C{Cidx}',
-                     label=f'Mean {labels[meth]}', alpha=1)
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', RuntimeWarning)     # lengths with no runs give NaN
+                    avg_error = np.nanmean(np.where(valid, errors, np.nan), axis=-1)
+                    avg_x = np.nanmean(np.where(valid, x, np.nan), axis=-1)
+                ok = np.isfinite(avg_error) & np.isfinite(avg_x)
+                handles[meth], = plot(avg_x[ok], avg_error[ok], markers[meth], color=colors[meth],
+                                      label=f'Mean {labels[meth]}', alpha=1)
 
             title = rf"Sliced $W_{sw_p}$ Error, Neal's funnel ($d = {dim}$)"
             subtitle = '\n' + rf'$\tau = {taus[j]}$, $T = {Ts[k]}$'
@@ -110,7 +116,8 @@ for j in range(len(taus)):
             plt.ylabel(ylabel, **fs)
             plt.grid(which='minor', alpha=0.3)
             plt.grid(which='major', alpha=0.3)
-            plt.legend(**fs)
+            order = [meth for meth in legend_order if meth in handles]
+            plt.legend([handles[meth] for meth in order], [f'Mean {labels[meth]}' for meth in order], **fs)
             if args.ppt:
                 plt.tick_params(labelsize=14)      # axis tick numbers
             plt.tight_layout()

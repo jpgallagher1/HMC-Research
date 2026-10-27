@@ -36,7 +36,7 @@ n_runs = 10
 methods = ['LF', 'AA', 'Newt', 'FPI']
 integrators = ['LF', 'AA', 'AVF_NewtonFPI_T', 'AVF_FPI_T']
 taus = [0.125]
-Ts = [1.0, 2.0, 3.0]
+Ts = [3.0]                     # single setting: tau = 0.125, T = 3, d = 10
 
 block_size = 200
 num_samples = 10_000
@@ -47,7 +47,7 @@ tol = 1e-3
 max_iter = 10                  # K cap for Newton; iteration cap for AA and FPI
 m = 3
 n_pts = 6
-base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_blocks_det')
+base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.125_T3')
 
 # Optional overrides for short runs; experiment settings live above.
 parser = argparse.ArgumentParser()

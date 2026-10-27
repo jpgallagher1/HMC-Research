@@ -10,9 +10,9 @@ from collections import defaultdict
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+from matplotlib.colors import Normalize
 
-labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': 'CHMC-Newt', 'Newton': 'CHMC-Newt', 'FPI': 'CHMC-FPI'}
+labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': 'CHMC-Newton', 'Newton': 'CHMC-Newton', 'FPI': 'CHMC-FPI'}
 fail_rate = 0.01        # a cell is marked [x] if the mean acceptance rate is below this
 
 
@@ -52,7 +52,9 @@ def cell_arrays(groups):
     return taus, tols, seconds, accept
 
 
-def draw_heatmap(ax, values, accept, taus, tols, fmt, norm=None, fs=None, cbar_label=None, title=None):
+def draw_heatmap(ax, values, accept, taus, tols, fmt, norm=None, fs=None, cbar_label=None, title=None,
+                 seconds=None):
+    """seconds: optional mean wall time per cell, printed instead of the value (colors still follow values)."""
     fs = fs or {}
     cmap = plt.get_cmap("viridis").copy()
     cmap.set_bad("lightgray")
@@ -64,12 +66,14 @@ def draw_heatmap(ax, values, accept, taus, tols, fmt, norm=None, fs=None, cbar_l
     ax.set_ylabel(r"Step size $\tau$", **fs)
     if title:
         ax.set_title(title, **fs)
+    cell_fs = {'fontsize': fs['fontsize'] - 2} if 'fontsize' in fs else {}   # cell text a bit smaller than labels
     for (i, j), value in np.ndenumerate(values):
         if accept[i, j] < fail_rate:       # chain never moved: its wall time is not meaningful
-            ax.text(j, i, "[x]", color="red", ha="center", va="center", fontweight="bold")
+            ax.text(j, i, "[x]", color="red", ha="center", va="center", fontweight="bold", **cell_fs)
         elif np.isfinite(value):
             color = "black" if image.norm(value) > 0.5 else "white"
-            ax.text(j, i, fmt(value), ha="center", va="center", color=color)
+            text = fmt(value) if seconds is None else f"{seconds[i, j]:.2f} s"
+            ax.text(j, i, text, ha="center", va="center", color=color, **cell_fs)
     return image
 
 
@@ -78,7 +82,7 @@ def plot_mean_runtime_heatmap(base, method, T=3.0, length=10_000, ppt=False):
     fs = {'fontsize': 16} if ppt else {}
     taus, tols, seconds, accept = cell_arrays(load_cells(base, method, T, length))
     fig, ax = plt.subplots(figsize=(8, 5), layout="constrained")
-    image = draw_heatmap(ax, seconds, accept, taus, tols, lambda v: f"{v:.3g}", fs=fs,
+    image = draw_heatmap(ax, seconds, accept, taus, tols, lambda v: f"{v:.2f}", fs=fs,
                          title=f"{labels.get(method, method)}: mean runtime, {length:,} MCMC iterations, T={T:g}")
     fig.colorbar(image, ax=ax).set_label("Mean wall-clock time per chain (s)", **fs)
     return fig, ax, seconds, accept, taus, tols
@@ -87,11 +91,14 @@ def plot_mean_runtime_heatmap(base, method, T=3.0, length=10_000, ppt=False):
 def plot_runtime_ratio_heatmap(base, methods, baseline='LF', T=3.0, length=10_000, ppt=False,
                                divider=(0.125, 0.25), baseline_tau=0.0625):
     """Wall time of each method divided by HMC's at tau = baseline_tau (above 1 means slower).
+    Colors show the ratio; each cell prints the mean wall time (s). Sized to fill 0.9 x 0.7 of a 16:9 slide.
 
-    One reference time is used for every cell. HMC has no solver tolerance, so its time at
-    baseline_tau is the mean over all its saved runs (every tolerance folder is a repeat).
+    One reference time is used for every cell. HMC has no solver tolerance, so its panel is a
+    single column: the mean over all its saved runs at each tau (every tolerance folder is a
+    repeat). Include `baseline` in `methods` to draw that column, e.g. ['AA', 'LF', 'Newt'].
     Cells where the method's chain never moved show [x].
-    A red dotted line is drawn between the two tau values in `divider` (None for no line).
+    A red dotted line is drawn between the two tau values in `divider` (None for no line);
+    the default marks the leapfrog stability limit 2 sqrt(1 - rho) ~ 0.18 for kappa = 256.
     """
     fs = {'fontsize': 16} if ppt else {}
     base_taus, _, base_seconds, _ = cell_arrays(load_cells(base, baseline, T, length))
@@ -99,20 +106,34 @@ def plot_runtime_ratio_heatmap(base, methods, baseline='LF', T=3.0, length=10_00
     panels = []
     for method in methods:
         taus, tols, seconds, accept = cell_arrays(load_cells(base, method, T, length))
-        panels.append((method, seconds / lf_time, accept))
-    finite = np.concatenate([r[np.isfinite(r)].ravel() for _, r, _ in panels])
-    norm = LogNorm(vmin=finite.min(), vmax=finite.max())         # shared scale across methods
-    fig, axes = plt.subplots(1, len(panels), figsize=(5.5 * len(panels) + 1, 5),
-                             layout="constrained", squeeze=False)
-    for ax, (method, ratio, accept) in zip(axes[0], panels):
-        image = draw_heatmap(ax, ratio, accept, taus, tols, lambda v: f"{v:.2g}×", norm=norm, fs=fs,
-                             title=f"{labels.get(method, method)} / {labels.get(baseline, baseline)} ($\\tau = {baseline_tau:g}$)")
+        if method == baseline:          # no solver tolerance: collapse the repeats to one column
+            seconds = np.nanmean(seconds, axis=1, keepdims=True)
+            accept = np.nanmean(accept, axis=1, keepdims=True)
+        panels.append((method, seconds / lf_time, accept, seconds))
+    norm = Normalize(vmin=0, vmax=10)          # shared linear scale; ratios above 10 take the top color
+    widths = [ratio.shape[1] for _, ratio, _, _ in panels]
+    fig, axes = plt.subplots(1, len(panels), figsize=(12.0, 5.25),        # 0.9 x 0.7 of a 13.33 x 7.5 in (16:9) slide
+                             layout="constrained", squeeze=False, gridspec_kw={'width_ratios': widths})
+    for ax, (method, ratio, accept, seconds) in zip(axes[0], panels):
+        image = draw_heatmap(ax, ratio, accept, taus, tols[:ratio.shape[1]], lambda v: f"{v:.2g}×",
+                             norm=norm, fs=fs, title=labels.get(method, method), seconds=seconds)
+        if ppt:
+            ax.tick_params(labelsize=14)      # axis tick numbers
+        if ax is not axes[0, 0]:            # tau labels on the left panel only
+            ax.set_ylabel("")
+        if method == baseline:
+            ax.set_xticks([])
+            ax.set_xlabel("")
         if divider is not None:
             lo, hi = (int(np.argmin(np.abs(taus - tau))) for tau in divider)
             ax.axhline((lo + hi) / 2, color="red", linestyle=":", linewidth=2.5)
-    fig.colorbar(image, ax=axes[0].tolist()).set_label(
-        rf"Wall time relative to {labels.get(baseline, baseline)} at $\tau = {baseline_tau:g}$", **fs)
-    fig.suptitle(f"Wall time vs HMC, {length:,} MCMC iterations, T={T:g}", **fs)
+    cbar = fig.colorbar(image, ax=axes[0].tolist(), extend="max", ticks=np.arange(0, 11, 2))
+    cbar.ax.set_yticklabels([f"{t:.1f}" for t in np.arange(0, 11, 2)])
+    if ppt:
+        cbar.ax.tick_params(labelsize=14)
+    cbar.set_label(rf"Time / {labels.get(baseline, baseline)} at $\tau = {baseline_tau:g}$", **fs)
+    if not ppt:                         # on a slide the slide title replaces this
+        fig.suptitle(f"Wall time vs HMC, {length:,} MCMC iterations, T={T:g}", **fs)
     return fig, axes, panels
 
 
@@ -128,7 +149,7 @@ if __name__ == "__main__":
     plotpath = args.output / ('plot_ppt' if args.ppt else 'plot')
     plotpath.mkdir(exist_ok=True)
 
-    others = [m for m in meta['methods'] if m not in ('LF', 'FPI')]   # FPI left out of the ratio figure
+    others = [m for m in ['AA', 'LF', 'Newt'] if m in meta['methods']]   # FPI left out of the ratio figure
     for method in meta['methods']:
         fig, *_ = plot_mean_runtime_heatmap(args.output, method, T, length, args.ppt)
         fig.savefig(plotpath / f'runtime_{method}.png', dpi=200)

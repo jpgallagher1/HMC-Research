@@ -16,6 +16,6 @@ source ~/.bashrc
 conda activate HMC-Research
 
 SCRIPT_DIR=/home/johngallagher/data/HMC-Research/CHMC/scripts/NCC_SIAM_26
-OUTPUT=/scratch/johngallagher/neals_funnel_blocks_det
+OUTPUT=/scratch/johngallagher/neals_funnel_det_tau0.125_T3
 
-python -u ${SCRIPT_DIR}/timed_blocks_funnel_plots.py --output ${OUTPUT} --ppt 1
+python -u ${SCRIPT_DIR}/timed_blocks_funnel_plots_det.py --output ${OUTPUT} --ppt 1

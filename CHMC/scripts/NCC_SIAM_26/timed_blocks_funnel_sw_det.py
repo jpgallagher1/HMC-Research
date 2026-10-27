@@ -29,7 +29,7 @@ sw_p = 1                    # sliced W_p: 1 gives sliced W_1 (mean over directio
 ref_seed = 0
 max_len = 100_000           # longest chain prefix evaluated; POT's peak memory is about 3 GB at 100k samples, 1000 projections
 
-base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_blocks_det')
+base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.125_T3')
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=base)
 parser.add_argument('--workers', type=int, default=None)    # default: SLURM_CPUS_PER_TASK, else all cores
