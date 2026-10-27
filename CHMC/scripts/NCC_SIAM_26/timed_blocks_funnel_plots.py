@@ -20,6 +20,8 @@ base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=base)
 parser.add_argument('--ppt', type=lambda x: x.lower() in ('true', '1', 'yes'), default=False)   # True: 16 pt text
+parser.add_argument('--tau', type=float, default=None)     # plot only this tau (default: every tau)
+parser.add_argument('--T', type=float, default=None)       # plot only this T (default: every T)
 args = parser.parse_args()
 base = args.output
 sw_base = base / 'sw_data'
@@ -79,8 +81,12 @@ for meth in methods:
 fs = {'fontsize': 16} if args.ppt else {}     # title, axis labels and legend size for slides
 ylabel = rf'Sliced Wasserstein $W_{sw_p}$ Error'
 
+assert args.tau is None or args.tau in taus, f'tau={args.tau} not in {taus}'
+assert args.T is None or args.T in Ts, f'T={args.T} not in {Ts}'
 for j in range(len(taus)):
     for k in range(len(Ts)):
+        if (args.tau is not None and taus[j] != args.tau) or (args.T is not None and Ts[k] != args.T):
+            continue
         if not any(np.isfinite(hmc_sw_metrics[meth][j, k]).any() for meth in methods):
             continue
         # loglog against iterations, semilog against time
