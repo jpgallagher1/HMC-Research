@@ -39,6 +39,9 @@ max_iter = metadata['max_iter']    # solver iteration cap (Newton K; AA and FPI 
 true_cov = np.asarray(metadata['covariance'])
 markers = {'LF': '-o', 'AA': '-*', 'Newt': '-^', 'Newton': '-^', 'FPI': '-v'}
 labels = {'LF': 'HMC-LF', 'AA': 'CHMC-AA', 'Newt': r'CHMC-Newton', 'Newton': r'CHMC-Newton', 'FPI': 'CHMC-FPI'}
+colors = {'AA': 'C0', 'LF': 'C1', 'FPI': 'C2', 'Newt': 'C3', 'Newton': 'C3'}   # as in the p-chi DRAFT plot
+plot_order = [meth for meth in ['AA', 'LF', 'FPI', 'Newt', 'Newton'] if meth in methods]
+legend_order = [meth for meth in ['LF', 'FPI', 'AA', 'Newt', 'Newton'] if meth in methods]
 
 # =============================================================================
 # Load the saved blocks
@@ -158,14 +161,15 @@ for metric_name, metric_data, ylabel, metric_title in plot_metrics:
             # loglog against iterations, semilog against time
             for xaxis, scale in [('iter', 'loglog'), ('time', 'semilog')]:
                 fig = plt.figure(figsize=(8, 6))
-                for Cidx, meth in enumerate(methods):
+                handles = {}
+                for meth in plot_order:
                     errors = metric_data[meth][j, k, :, :]
                     if not np.isfinite(errors).any():
                         continue
                     times = hmc_runtimes[meth][j, k, :, :]
                     x = np.broadcast_to(lens[:, None], errors.shape) if xaxis == 'iter' else times
                     plot = plt.loglog if scale == 'loglog' else plt.semilogy
-                    plot(x, errors, markers[meth], color=f'C{Cidx}', alpha=0.15)
+                    plot(x, errors, markers[meth], color=colors[meth], alpha=0.15)
 
                     valid = np.isfinite(errors) & np.isfinite(x)
                     counts = valid.sum(axis=-1)
@@ -176,8 +180,8 @@ for metric_name, metric_data, ylabel, metric_title in plot_metrics:
                                           out=np.full(len(lens), np.nan), where=counts > 0)
                     avg_x = np.divide(np.where(valid, x, 0).sum(axis=-1), counts,
                                       out=np.full(len(lens), np.nan), where=counts > 0)
-                    plot(avg_x, avg_error, markers[meth], color=f'C{Cidx}',
-                         label=f'Mean {labels[meth]}', alpha=1)
+                    handles[meth], = plot(avg_x, avg_error, markers[meth], color=colors[meth],
+                                          label=f'Mean {labels[meth]}', alpha=1)
 
                 sym = r'\alpha' if args.ppt else r'\rho'     # slides call the matrix perturbation alpha
                 title = rf'{metric_title}, covariance ${sym} = {rho:.4f}$'
@@ -189,7 +193,8 @@ for metric_name, metric_data, ylabel, metric_title in plot_metrics:
                 plt.ylabel(ylabel, **fs)
                 plt.grid(which='minor', alpha=0.3)
                 plt.grid(which='major', alpha=0.3)
-                plt.legend(**fs)
+                order = [meth for meth in legend_order if meth in handles]
+                plt.legend([handles[meth] for meth in order], [f'Mean {labels[meth]}' for meth in order], **fs)
                 if args.ppt:
                     plt.tick_params(labelsize=14)      # axis tick numbers
                 plt.tight_layout()
