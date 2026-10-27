@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 # Configuration
 # =============================================================================
 
-base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.125_T3')
+base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.0625_T3')
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=base)
 parser.add_argument('--ppt', type=lambda x: x.lower() in ('true', '1', 'yes'), default=False)   # True: 16 pt text

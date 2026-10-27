@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=neals_plots
-#SBATCH --partition=test
+#SBATCH --partition=short
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --mem=8G
@@ -16,6 +16,6 @@ source ~/.bashrc
 conda activate HMC-Research
 
 SCRIPT_DIR=/home/johngallagher/data/HMC-Research/CHMC/scripts/NCC_SIAM_26
-OUTPUT=/scratch/johngallagher/neals_funnel_det_tau0.125_T3
+OUTPUT=/scratch/johngallagher/neals_funnel_det_tau0.0625_T3
 
 python -u ${SCRIPT_DIR}/timed_blocks_funnel_plots_det.py --output ${OUTPUT} --ppt 1

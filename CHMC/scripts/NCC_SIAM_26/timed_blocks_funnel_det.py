@@ -35,8 +35,8 @@ dim = 10                       # total dimension: y plus 9 x's (QP has 2*dim ent
 n_runs = 10
 methods = ['LF', 'AA', 'Newt', 'FPI']
 integrators = ['LF', 'AA', 'AVF_NewtonFPI_T', 'AVF_FPI_T']
-taus = [0.125]
-Ts = [3.0]                     # single setting: tau = 0.125, T = 3, d = 10
+taus = [0.0625]
+Ts = [3.0]                     # single setting: tau = 0.0625, T = 3, d = 10
 
 block_size = 200
 num_samples = 10_000
@@ -47,7 +47,7 @@ tol = 1e-3
 max_iter = 10                  # K cap for Newton; iteration cap for AA and FPI
 m = 3
 n_pts = 6
-base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.125_T3')
+base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.0625_T3')
 
 # Optional overrides for short runs; experiment settings live above.
 parser = argparse.ArgumentParser()

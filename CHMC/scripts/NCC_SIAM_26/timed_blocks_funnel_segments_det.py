@@ -16,7 +16,7 @@ import json
 import numpy as np
 import ot
 
-base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.125_T3')
+base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.0625_T3')
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=base)
 parser.add_argument('--segment', type=int, default=5000)        # samples per segment
