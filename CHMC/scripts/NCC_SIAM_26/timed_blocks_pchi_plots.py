@@ -1,5 +1,7 @@
 # October 26, 2026
-# W1 error plots for p-chi (p, d read from metadata) in the style of timed_blocks_plots.py.
+# W1 error plot for p-chi in the style of timed_blocks_plots.py. Default: the LF/CHMC crossover,
+# p=6, d=1200, tau=0.072, T=4, W1 over all retained states against time, log-log.
+# --metric, --xaxis, --scale, --tau, --T select another single plot from the same data.
 # Reads OUTPUT written by timed_blocks_pchi.py. W1 as in W1plots-p=4_d=400_m=2_centered.ipynb:
 # ot.wasserstein_1d(|q| of accepted states, 10_000 exact p-chi draws from PRNGKey(-1)).
 
@@ -23,12 +25,17 @@ import matplotlib.pyplot as plt
 
 results = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results')
 parser = argparse.ArgumentParser()
-parser.add_argument('--p', type=int, default=4)
-parser.add_argument('--d', type=int, default=400)
-parser.add_argument('--output', type=Path, default=None)          # default: results/pchi_p{p}_d{d}_blocks
+parser.add_argument('--p', type=int, default=6)
+parser.add_argument('--d', type=int, default=1200)
+parser.add_argument('--tau', type=float, default=0.072)
+parser.add_argument('--T', type=float, default=4.0)
+parser.add_argument('--metric', choices=['w1_retained', 'w1'], default='w1_retained')   # w1: accepted states only, as the notebook
+parser.add_argument('--xaxis', choices=['time', 'iter'], default='time')
+parser.add_argument('--scale', choices=['loglog', 'semilog'], default='loglog')
+parser.add_argument('--output', type=Path, default=None)          # default: results/pchi_p{p}_d{d}_tau{tau}_blocks
 parser.add_argument('--ppt', type=lambda x: x.lower() in ('true', '1', 'yes'), default=False)   # True: 16 pt text
 args = parser.parse_args()
-base = args.output or results / f'pchi_p{args.p}_d{args.d}_blocks'
+base = args.output or results / f'pchi_p{args.p}_d{args.d}_tau{args.tau}_blocks'
 plotpath = base / ('plot_ppt' if args.ppt else 'plot')
 plotpath.mkdir(exist_ok=True)
 
@@ -45,6 +52,8 @@ tol = metadata['tol']
 max_iter = metadata['max_iter']
 AA_m = metadata['AA_m']
 n_pts = metadata['n_pts']
+assert (args.p, args.d) == (p, d), f'--p {args.p} --d {args.d} does not match {base} (p={p}, d={d})'
+assert args.tau in taus and args.T in Ts, f'tau={args.tau}, T={args.T} not in {base}: taus {taus}, Ts {Ts}'
 plot_order = [meth for meth in ['AA', 'LF', 'FPI', 'Newton'] if meth in methods]   # colors as in the DRAFT plot
 legend_order = [meth for meth in ['LF', 'FPI', 'AA', 'Newton'] if meth in methods]
 markers = {'LF': '-o', 'AA': '-*', 'Newt': '-^', 'Newton': '-^', 'FPI': '-v'}
@@ -131,16 +140,15 @@ np.savez(
 
 fs = {'fontsize': 16} if args.ppt else {}     # title, axis labels and legend size for slides
 
-plot_metrics = [('w1', hmc_w1_metrics, 'accepted states'),
-                ('w1_retained', hmc_w1_retained_metrics, 'all retained states')]
+plot_metrics = {'w1': (hmc_w1_metrics, 'accepted states'),
+                'w1_retained': (hmc_w1_retained_metrics, 'all retained states')}
 
-for metric_name, metric_data, states in plot_metrics:
-    for j in range(len(taus)):
-        for k in range(len(Ts)):
+for metric_name, (metric_data, states) in [(args.metric, plot_metrics[args.metric])]:
+    for j in [taus.index(args.tau)]:
+        for k in [Ts.index(args.T)]:
             if not any(np.isfinite(metric_data[meth][j, k]).any() for meth in methods):
-                continue
-            # loglog against iterations, semilog and loglog against time
-            for xaxis, scale in [('iter', 'loglog'), ('time', 'semilog'), ('time', 'loglog')]:
+                raise ValueError(f'No {metric_name} data for tau={args.tau}, T={args.T}')
+            for xaxis, scale in [(args.xaxis, args.scale)]:
                 fig = plt.figure(figsize=(8, 6))
                 handles = {}
                 for meth in plot_order:
@@ -187,4 +195,4 @@ for metric_name, metric_data, states in plot_metrics:
                 plt.savefig(folder / f'pchi_p{p}_d{d}_{metric_name}_{xaxis}_{scale}.png', dpi=200)
                 plt.close(fig)
 
-print(f'Plots saved to {plotpath}')
+print(f'Plot saved to {folder / f"pchi_p{p}_d{d}_{metric_name}_{xaxis}_{scale}.png"}')
