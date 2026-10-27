@@ -4,7 +4,7 @@
 # Two 1x3 figures (HMC-LF, CHMC-AA, CHMC-Newton) of (x_1, yy) samples against the 1 and 2 sd
 # level sets of the target: one from the determinant-adjusted run (timed_blocks_funnel_det.py) and one from the
 # unadjusted run (timed_blocks_funnel.py). Leapfrog is volume preserving, so its panel is the
-# same algorithm in both figures (different seeds and folders).
+# same algorithm in both figures; with the samekeys det run it is the same chain.
 # Plotting only: reads the saved block files and computes nothing else.
 # Presentation sizing: each figure fills about 0.9 x 0.7 of a 16:9 slide, 16 pt text, 14 pt ticks.
 
@@ -21,7 +21,7 @@ SCRATCH = Path("/scratch/johngallagher")
 PLOTS = Path("/home/johngallagher/data/HMC-Research/plots")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--det", type=Path, default=None)          # default: SCRATCH/neals_funnel_det_tau<tau>_T<T>
+parser.add_argument("--det", type=Path, default=None)          # default: SCRATCH/neals_funnel_det_samekeys_tau<tau>_T<T>
 parser.add_argument("--nodet", type=Path, default=SCRATCH/"neals_funnel_blocks")
 parser.add_argument("--tau", type=float, default=0.125)
 parser.add_argument("--T", type=float, default=3.0)
@@ -31,7 +31,7 @@ parser.add_argument("--sds", type=float, nargs="+", default=[1, 2])   # level se
 parser.add_argument("--plotpath", type=Path, default=PLOTS/"neals_funnel_det"/"scatter")
 args = parser.parse_args()
 
-det_base = args.det or SCRATCH/f"neals_funnel_det_tau{args.tau:g}_T{args.T:g}"
+det_base = args.det or SCRATCH/f"neals_funnel_det_samekeys_tau{args.tau:g}_T{args.T:g}"
 plotpath = args.plotpath
 plotpath.mkdir(parents=True, exist_ok=True)
 

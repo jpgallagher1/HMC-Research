@@ -4,6 +4,9 @@
 # Same layout as timed_blocks.py; analysis is sliced Wasserstein in timed_blocks_funnel_plots.py.
 # The implicit integrators run with config.logdet = True: the Metropolis ratio includes the
 # log|det J| of each proposal (see sampler.py), and it is saved per proposal in each block as `logdets`.
+# Keys are those of the uncorrected run in --keys_from (timed_blocks_funnel.py): the indices folded into
+# the seed are each method's, tau's and T's positions in that run's metadata, so every chain starts from
+# the same point with the same random numbers (checked against its first block).
 
 import sys
 from pathlib import Path
@@ -35,8 +38,8 @@ dim = 10                       # total dimension: y plus 9 x's (QP has 2*dim ent
 n_runs = 10
 methods = ['LF', 'AA', 'Newt', 'FPI']
 integrators = ['LF', 'AA', 'AVF_NewtonFPI_T', 'AVF_FPI_T']
-taus = [0.0625]
-Ts = [3.0]                     # single setting: tau = 0.0625, T = 3, d = 10
+taus = [0.125]
+Ts = [3.0]                     # single setting: tau = 0.125, T = 3, d = 10
 
 block_size = 200
 num_samples = 10_000
@@ -47,11 +50,13 @@ tol = 1e-3
 max_iter = 10                  # K cap for Newton; iteration cap for AA and FPI
 m = 3
 n_pts = 6
-base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_tau0.0625_T3')
+base = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_det_samekeys_tau0.125_T3')
+keys_from = Path('/Users/johngallagher/Documents/UCMerced/Research/GitHub/HMC-Online/results/neals_funnel_blocks')
 
 # Optional overrides for short runs; experiment settings live above.
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, default=base)
+parser.add_argument('--keys_from', type=Path, default=keys_from)   # uncorrected run whose keys are reused
 parser.add_argument('--samples', type=int, default=num_samples)
 parser.add_argument('--runs', type=int, default=n_runs)
 parser.add_argument('--taus', type=float, nargs='+', default=taus)
@@ -59,6 +64,7 @@ parser.add_argument('--Ts', type=float, nargs='+', default=Ts)
 parser.add_argument('--only_T', type=float, nargs='+', default=None)   # run just these Ts (one job per T); metadata keeps the full grid
 args = parser.parse_args()
 base = args.output
+keys_from = args.keys_from
 num_samples = args.samples
 n_runs = args.runs
 taus = args.taus
@@ -75,6 +81,15 @@ assert all(np.isfinite(x) and x > 0 for x in [*taus, *Ts, tol])
 # =============================================================================
 
 H = logpdf_hamiltonian(neals_funnel_logpdf, None)   # identity mass matrix
+
+# Key indices from the uncorrected run's grid (its h, j, k), not from the single setting here.
+key_meta = json.loads((keys_from / 'metadata.json').read_text())
+assert key_meta['seed'] == seed and key_meta['dim'] == dim and key_meta['block_size'] == block_size
+assert key_meta['integrators'] == integrators, 'methods must match the uncorrected run'
+key_h = {meth: key_meta['methods'].index(meth) for meth in methods}
+key_j = [key_meta['taus'].index(tau) for tau in taus]
+key_k = [key_meta['Ts'].index(T) for T in Ts]
+print(f'keys from {keys_from}: h={key_h}, j={key_j}, k={key_k}')
 lens = np.arange(block_size, num_samples + 1, block_size)
 
 print(f'JAX devices: {jax.devices()}')
@@ -86,6 +101,7 @@ parameters = dict(
     methods=methods, integrators=integrators, taus=taus, Ts=Ts,
     block_size=block_size, seed=seed, tol=tol, max_iter=max_iter,
     AA_m=m, n_pts=n_pts, jax_version=jax.__version__, backend=jax.default_backend(),
+    keys_from=str(keys_from), key_taus=key_meta['taus'], key_Ts=key_meta['Ts'],
 )
 metadata_path = base / 'metadata.json'
 if metadata_path.exists():
@@ -102,7 +118,7 @@ else:
 
 t0 = last_print = time.perf_counter()
 
-# The reference method runs first so the others can match its wall time (keys still use h).
+# The reference method runs first so the others can match its wall time (keys still use key_h).
 for h, meth in sorted(enumerate(methods), key=lambda hm: hm[1] != match_time_to):
     configs = gen_configs(
         taus, Ts, tol=tol, max_iter=max_iter, n_pts=n_pts,
@@ -122,11 +138,19 @@ for h, meth in sorted(enumerate(methods), key=lambda hm: hm[1] != match_time_to)
                 folder.mkdir(parents=True, exist_ok=True)
 
                 key = jr.PRNGKey(seed)
-                for index in [h, j, k, i]:
+                for index in [key_h[meth], key_j[j], key_k[k], i]:
                     key = jr.fold_in(key, index)
                 key, init_key = jr.split(key)
                 qp0 = QP(jr.normal(init_key, shape=(2*dim,), dtype=jnp.float64))
                 init = [qp0, jnp.float64(0), jnp.asarray(False)]
+                # Same start as the uncorrected chain, when its first block is available.
+                key_block = (keys_from / meth / f'tau_{taus[j]}' / f'T_{Ts[k]}' / f'run_{i}'
+                             / 'block_00000000.npz')
+                if key_block.exists():
+                    with np.load(key_block) as data:
+                        assert np.array_equal(data['start_qp'], np.asarray(qp0.x)), f'keys differ from {key_block}'
+                else:
+                    print(f'warning: {key_block} not found; start not checked', flush=True)
                 elapsed = 0.0
                 start_block = 0
 

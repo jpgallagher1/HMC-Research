@@ -8,7 +8,7 @@
 #SBATCH --output=neals_scatter_det_%j.out
 
 # Scatter of (x_1, y) samples vs the 1 and 2 sd target level sets, HMC-LF | CHMC-AA | CHMC-Newton,
-# for the log|det J| corrected run (/scratch/johngallagher/neals_funnel_det_tau0.125_T3) and the
+# for the log|det J| corrected run (/scratch/johngallagher/neals_funnel_det_samekeys_tau0.125_T3, same keys) and the
 # uncorrected run (/scratch/johngallagher/neals_funnel_blocks), tau = 0.125, T = 3 (script defaults;
 # other settings: add --tau 0.0625 to the python line). Sized for slides.
 # Plots go to /home/johngallagher/data/HMC-Research/plots/neals_funnel_det/scatter/.

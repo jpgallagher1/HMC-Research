@@ -22,7 +22,7 @@ source ~/.bashrc
 conda activate HMC-Research
 
 SCRIPT_DIR=/home/johngallagher/data/HMC-Research/CHMC/scripts/NCC_SIAM_26
-OUTPUT=/scratch/johngallagher/neals_funnel_det_tau0.0625_T3
+OUTPUT=/scratch/johngallagher/neals_funnel_det_samekeys_tau0.125_T3
 SEGMENT=${SEGMENT:-1000}
 
 echo "Segment diagnostic: ${OUTPUT}, segment=${SEGMENT}"
